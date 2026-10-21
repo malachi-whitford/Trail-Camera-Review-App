@@ -1,0 +1,3131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trail Camera Reviewer</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #121612;
+    --panel: #1b211d;
+    --raised: #252d28;
+    --line: #34403a;
+    --text: #e6ebe7;
+    --muted: #93a099;
+    --lichen: #b4c98d;
+    --blue: #5aa2e0;
+    --red: #e2624d;
+    --amber: #eab543;
+    --green: #5fa36b;
+    --stamp: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif;
+    position: relative; overflow: hidden;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--lichen); outline-offset: 2px; }
+  .screen { position: absolute; inset: 0; display: none; }
+  .screen.active { display: flex; }
+  #splash {
+    align-items: center; justify-content: center; flex-direction: column; text-align: center;
+    background: radial-gradient(ellipse at 50% 55%, #1f2a22 0%, #121612 65%), var(--bg);
+  }
+  #splash h1 {
+    margin: 0; font-size: clamp(34px, 7vw, 68px); font-weight: 600; letter-spacing: -0.02em;
+    animation: rise 900ms ease-out both;
+  }
+  #splash p { margin: 10px 0 0; color: var(--muted); font-size: 16px; animation: rise 900ms 250ms ease-out both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { #splash h1, #splash p { animation: none; } .spin { animation-duration: 2s; } }
+  #select { align-items: center; justify-content: center; padding: 20px; overflow: auto; flex-direction: column; gap: 20px; }
+  .card {
+    width: min(720px, 100%); background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 28px 32px;
+  }
+  .card h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; }
+  .card .sub { margin: 0 0 22px; color: var(--muted); }
+  .field { display: grid; grid-template-columns: 140px 1fr; gap: 6px 14px; align-items: center; margin-bottom: 14px; }
+  .field label { color: var(--muted); font-weight: 600; }
+  .in {
+    background: var(--raised); border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 10px; width: 100%; min-width: 0;
+  }
+  .in:disabled { opacity: 0.6; cursor: not-allowed; }
+  #camDetails {
+    margin: 4px 0 20px; padding: 14px 16px; background: var(--bg);
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  #camDetails dl { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; margin: 0; }
+  #camDetails dt { color: var(--muted); }
+  #camDetails dd { margin: 0; overflow-wrap: anywhere; }
+  .row-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  #selErr { color: var(--red); margin-bottom: 14px; font-weight: 600; }
+  .btn {
+    background: var(--raised); border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; font-weight: 600; white-space: nowrap;
+  }
+  .btn:hover:not(:disabled) { border-color: #4b5a52; background: #2d3731; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn.primary { background: var(--lichen); color: #142016; border-color: var(--lichen); }
+  .btn.primary:hover:not(:disabled) { background: #c5d8a1; }
+  .btn.tag { background: var(--green); border-color: var(--green); color: #07160b; }
+  .btn.tag:hover:not(:disabled) { background: #74b880; }
+  .btn.finish { background: var(--blue); border-color: var(--blue); color: #06121d; }
+  .btn.finish:hover:not(:disabled) { background: #7abcf0; }
+  .btn.undo { background: transparent; color: var(--red); border-color: var(--red); }
+  .btn.undo:hover:not(:disabled) { background: rgba(226, 98, 77, 0.14); }
+  .btn.help { background: var(--amber); border-color: var(--amber); color: #201700; }
+  .btn.on { background: var(--green); border-color: var(--green); color: #07160b; }
+  .btn.load { background: var(--blue); border-color: var(--blue); color: #06121d; }
+  @media (pointer: coarse) {
+    .btn { min-height: 42px; padding: 8px 14px; }
+    .in, .ac input { min-height: 42px; }
+    .xbtn { width: 42px; height: 42px; }
+  }
+  #review { flex-direction: column; }
+  .controls {
+    margin: 10px 10px 6px; padding: 6px 12px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; position: relative; z-index: 5;
+  }
+  .crow { display: flex; align-items: center; gap: 8px; padding: 4px 0; flex-wrap: wrap; }
+  .crow .grow { flex: 1; min-width: 120px; }
+  .cam-title { font-weight: 600; margin-right: 6px; }
+  .cam-title small { color: var(--muted); font-weight: 400; margin-left: 6px; }
+  .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 6px; }
+  input[type="range"] { accent-color: var(--lichen); }
+  .lbl { color: var(--muted); }
+  .spacer { flex: 1; }
+  details.pop { position: relative; }
+  details.pop > summary { list-style: none; cursor: pointer; }
+  details.pop > summary::-webkit-details-marker { display: none; }
+  .popbody {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; min-width: 190px;
+    background: var(--raised); border: 1px solid #4b5a52; border-radius: 8px; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 6px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+  .popbody label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .popbody input { accent-color: var(--lichen); }
+  #count { color: var(--muted); min-width: 130px; text-align: right; font-variant-numeric: tabular-nums; }
+  .dock {
+    margin: 0 10px 10px; padding: 6px 12px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px; position: relative; z-index: 5;
+  }
+  .species { align-items: flex-start; }
+  .species > .lbl { font-weight: 600; color: var(--text); padding-top: 7px; }
+  #rows { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sprow { display: flex; align-items: center; gap: 6px; }
+  .ac { position: relative; display: flex; width: 300px; max-width: 70vw; }
+  .ac input {
+    flex: 1; min-width: 0; background: var(--raised); border: 1px solid var(--line);
+    border-right: 0; border-radius: 6px 0 0 6px; padding: 7px 10px; font-size: 15px;
+  }
+  .ac .arrow {
+    width: 30px; background: var(--raised); border: 1px solid var(--line);
+    border-radius: 0 6px 6px 0; cursor: pointer; color: var(--muted);
+  }
+  .ac-list {
+    position: absolute; bottom: calc(100% + 2px); left: 0; right: 0; z-index: 30; margin: 0; padding: 0;
+    list-style: none; max-height: 240px; overflow: auto; background: var(--raised);
+    border: 1px solid #4b5a52; border-radius: 6px; box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
+  }
+  .ac-list li { padding: 6px 10px; cursor: pointer; }
+  .ac-list li.hi, .ac-list li:hover:not(.hdr) { background: #34423a; }
+  .ac-list li.hdr { color: var(--lichen); font-weight: 600; cursor: default; background: #1f2722; }
+  .xbtn {
+    width: 28px; height: 28px; border-radius: 6px; border: 1px solid var(--red);
+    background: transparent; color: var(--red); cursor: pointer; font-weight: 700;
+  }
+  #recent { display: flex; flex-wrap: wrap; gap: 6px; }
+  .rchip {
+    background: var(--raised); border: 1px solid var(--line); border-radius: 14px;
+    padding: 3px 12px 3px 8px; cursor: pointer; font-weight: 600;
+  }
+  .rchip:hover { border-color: var(--lichen); }
+  .rwrap { display: inline-flex; align-items: stretch; }
+  .rwrap .rchip { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .rpin { background: var(--raised); border: 1px solid var(--line); border-left: 0; border-radius: 0 6px 6px 0; padding: 0 7px; font-size: 11px; color: var(--muted); cursor: pointer; }
+  .rpin:hover { color: var(--text); border-color: var(--lichen); }
+  .rwrap.pinned .rchip, .rwrap.pinned .rpin { border-color: var(--amber); }
+  .rwrap.pinned .rpin { color: var(--amber); font-weight: 700; }
+  .rchip kbd { margin-right: 6px; }
+  #recentHint { color: var(--muted); font-size: 12px; }
+  #stage {
+    position: relative; flex: 1; min-height: 0; margin: 0 10px 6px; background: #000;
+    border-radius: 8px; overflow: hidden; cursor: grab; touch-action: none; user-select: none;
+  }
+  #stage.dragging { cursor: grabbing; }
+  #photo {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+    transform-origin: 50% 50%; pointer-events: none; display: none; will-change: transform;
+  }
+  #vid { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: none; background: #000; object-fit: contain; transform-origin: 50% 50%; pointer-events: none; will-change: transform; }
+  #vidFrame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: none; background: #000; z-index: 4; }
+  #vidFail {
+    position: absolute; inset: 0; z-index: 5; display: none; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; text-align: center; padding: 30px; background: rgba(0, 0, 0, 0.72);
+  }
+  #vidFail p { margin: 0; max-width: 46ch; font-size: 16px; }
+  #overlay { position: absolute; top: 14px; left: 14px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; z-index: 2; }
+  .chip {
+    background: rgba(0, 0, 0, 0.82); color: #fff; font: 700 15px/1.3 var(--stamp);
+    padding: 3px 8px; border-radius: 2px; align-self: flex-start; max-width: 80vw; overflow-wrap: anywhere;
+  }
+  #stageMsg {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center; gap: 10px;
+    text-align: center; color: var(--muted); padding: 30px; pointer-events: none; font-size: 16px; z-index: 3;
+  }
+  .spin {
+    width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line);
+    border-top-color: var(--lichen); animation: spin 800ms linear infinite; flex: none;
+  }
+  #busy {
+    position: absolute; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center;
+    background: rgba(10, 13, 11, 0.62); backdrop-filter: blur(1px);
+  }
+  #busy div { background: var(--panel); border: 1px solid var(--line); padding: 14px 22px; border-radius: 8px; font-size: 15px; }
+  #toasts { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .toast { background: var(--raised); border: 1px solid var(--line); border-left: 4px solid var(--blue); padding: 9px 16px; border-radius: 6px; max-width: 80vw; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+  .toast.warn { border-left-color: var(--amber); }
+  .toast.error { border-left-color: var(--red); }
+  .toast.ok { border-left-color: var(--green); }
+  .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; padding: 15px; }
+  .gallery-item { background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 6px; text-align: center; cursor: zoom-in; }
+  .gallery-item img { width: 100%; height: 120px; object-fit: cover; background: #000; border-radius: 4px; }
+  .gallery-item .name { font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .gallery-item .sp { font-size: 13px; font-weight: 600; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--lichen); }
+  .gallery-item .sp.unknown { color: var(--amber); font-weight: 500; font-style: italic; }
+  dialog#help, dialog#userGalleryModal, dialog#spDlg {
+    width: min(880px, 96vw); max-height: 88vh; padding: 0; background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  dialog#spDlg { width: min(460px, 94vw); padding: 22px 24px; }
+  dialog#spDlg p { margin: 0 0 16px; font-size: 16px; }
+  #spBtns { display: flex; gap: 10px; flex-wrap: wrap; }
+  #userGalleryModal header { flex-wrap: wrap; gap: 10px 14px; }
+  #userGalleryModal header h2 { white-space: nowrap; }
+  #gSearch { flex: 1 1 220px; max-width: 380px; margin-left: auto; }
+  #gCount { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  dialog#tagViewer, dialog#vwViewer {
+    width: min(980px, 96vw); max-height: 96vh; padding: 0; overflow: auto; background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  #tagViewer header, #vwViewer header { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 10; }
+  #tagViewer header h2, #vwViewer header h2 { margin: 0; font-size: 18px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #tvPos { color: var(--muted); white-space: nowrap; }
+  .tvbody { padding: 14px 18px 18px; }
+  .tvstage { display: flex; align-items: center; gap: 10px; }
+  .tvmedia { flex: 1; min-width: 0; min-height: 220px; background: #000; border-radius: 6px; display: flex; align-items: center; justify-content: center; position: relative; }
+  .tvmedia img, .tvmedia video { display: block; max-width: 100%; max-height: 54vh; }
+  .tvmedia video { display: none; }
+  #tvMsg { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; color: var(--muted); text-align: center; padding: 10px; }
+  .tvnav { height: 56px; padding: 0 14px; font-size: 20px; }
+  .tvname { color: var(--muted); font: 12px var(--stamp); margin: 8px 0 12px; overflow-wrap: anywhere; }
+  .tvedit { display: flex; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+  .tvedit > .lbl { padding-top: 7px; font-weight: 600; color: var(--text); }
+  #tvRows, #vvRows, #vvAdmRows { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tvactions { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  #tvStatus, #vvStatus, #vvAdmStatus { color: var(--muted); }
+  .cardtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .cardtop h2 { margin: 0 !important; }
+  .cardtop + .sub { margin-top: 4px; }
+  /* ---- view tagged photos window ---- */
+  dialog#vwDlg {
+    width: min(1240px, 98vw); height: min(92vh, 980px); max-height: 96vh; padding: 0; overflow: hidden;
+    background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px;
+  }
+  dialog#vwDlg[open] { display: flex; flex-direction: column; }
+  #vwDlg > header { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  #vwDlg > header h2 { margin: 0; font-size: 18px; flex: 1; }
+  #vwWho { color: var(--muted); }
+  #vwLogin { padding: 22px 26px 26px; max-width: 560px; }
+  #vwLogin[hidden], #vwMain[hidden], #vvSuggBox[hidden], #vvAdmin[hidden], #vwMore[hidden], #vwProg[hidden] { display: none; }
+  #vwErr { color: var(--red); margin-bottom: 14px; font-weight: 600; }
+  #vwMain { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .vwbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  .vwbar .in { width: auto; max-width: 100%; }
+  #vwSearch { flex: 1 1 200px; min-width: 150px; }
+  .vwbar .chk { display: flex; gap: 6px; align-items: center; color: var(--muted); white-space: nowrap; }
+  #vwCount { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  #vwProg { padding: 6px 18px; color: var(--amber); font-size: 13px; border-bottom: 1px solid var(--line); }
+  #vwScroll { overflow: auto; flex: 1; min-height: 0; }
+  #vwMore { display: block; margin: 4px auto 22px; }
+  .gallery-item { position: relative; }
+  .gstar {
+    position: absolute; top: 10px; right: 10px; background: rgba(0, 0, 0, 0.62); color: var(--text);
+    border: 1px solid var(--line); border-radius: 14px; padding: 1px 9px; font-size: 13px; cursor: pointer; font-weight: 600;
+  }
+  .gstar.on { color: var(--amber); border-color: var(--amber); }
+  .gstar:hover { background: rgba(0, 0, 0, 0.85); }
+  .gallery-item .cam { font-size: 11px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gallery-item .doubt { font-size: 12px; font-weight: 600; color: var(--amber); margin-top: 3px; }
+  .vvreact { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .btn.star.on { background: var(--amber); border-color: var(--amber); color: #201700; }
+  .btn.nahh { border-color: var(--red); color: var(--red); background: transparent; }
+  .btn.nahh.on { background: var(--red); color: #1d0803; }
+  #vvSuggSummary { color: var(--lichen); }
+  #vvSuggBox, #vvAdmin { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 12px; }
+  #vvAdmin h3 { margin: 0 0 8px; font-size: 14px; color: var(--amber); }
+  #vvChips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 10px; }
+  #vvVotes { margin-top: 10px; color: var(--muted); font-size: 13px; }
+  #vvVotes div { margin: 2px 0; }
+  /* ---- instructor tools (only reachable after an instructor signs in) ---- */
+  #vwTabs { display: flex; gap: 6px; padding: 8px 18px 0; border-bottom: 1px solid var(--line); }
+  #vwTabs[hidden], #vwSetup[hidden], #vwReview[hidden] { display: none; }
+  #vwTabs button { background: transparent; border: 1px solid transparent; border-bottom: 0; border-radius: 6px 6px 0 0; padding: 8px 16px; color: var(--muted); font-weight: 600; cursor: pointer; }
+  #vwTabs button.on { background: var(--raised); border-color: var(--line); color: var(--text); }
+  #vwSetup, #vwReview { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  #suNote { padding: 8px 18px; color: var(--muted); font-size: 13px; border-bottom: 1px solid var(--line); }
+  #suMsg { padding: 6px 18px; font-size: 13px; color: var(--amber); }
+  #suMsg.err { color: var(--red); font-weight: 600; white-space: pre-line; }
+  #suScroll { overflow: auto; flex: 1; min-height: 0; }
+  #suTable { border-collapse: collapse; width: auto; font-size: 13px; }
+  #suTable th { position: sticky; top: 0; background: var(--panel); text-align: left; padding: 6px 8px; color: var(--muted); border-bottom: 1px solid var(--line); z-index: 2; white-space: nowrap; }
+  #suTable td { padding: 4px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  #suTable td .in { padding: 4px 6px; font-size: 13px; }
+  #suTable td.n .in { width: 76px; } #suTable td.d .in { width: 98px; } #suTable td.t .in { width: 112px; }
+  #suTable td.f { min-width: 190px; }
+  #suTable .in.chg { border-color: var(--amber); }
+  #suTable tr.newrow td { background: rgba(180, 201, 141, 0.07); }
+  #suTable tr.chkrow td { color: var(--muted); font-size: 12px; padding-top: 0; }
+  #suTable .locked { color: var(--muted); }
+  #suTable .mini { padding: 2px 8px; font-size: 12px; }
+  .fsrc { color: var(--muted); font-size: 11px; display: block; }
+  .fpend { color: var(--amber); }
+  #suFoot { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 18px; border-top: 1px solid var(--line); }
+  #suPending { flex: 1; color: var(--muted); }
+  #rvBody { padding: 20px 26px; max-width: 720px; overflow: auto; }
+  #rvMsg { color: var(--red); font-weight: 600; margin-bottom: 12px; }
+  #rvDetails { margin: 4px 0 20px; padding: 14px 16px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+  #rvDetails dl { display: grid; grid-template-columns: 150px 1fr; gap: 4px 12px; margin: 0; }
+  #rvDetails dt { color: var(--muted); } #rvDetails dd { margin: 0; overflow-wrap: anywhere; }
+  dialog#fbDlg, dialog#sfDlg, dialog#cfDlg { width: min(760px, 96vw); max-height: 90vh; padding: 0; overflow: auto; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; }
+  dialog#fbDlg[open], dialog#sfDlg[open], dialog#cfDlg[open] { display: flex; flex-direction: column; }
+  .idlg-h { display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  .idlg-h h2 { margin: 0; font-size: 18px; flex: 1; }
+  .idlg-b { padding: 14px 18px; overflow: auto; flex: 1; min-height: 120px; }
+  .idlg-f { display: flex; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--line); justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+  #fbCrumbs { display: flex; flex-wrap: wrap; gap: 4px; font-size: 13px; margin: 10px 0; color: var(--muted); }
+  #fbCrumbs button { background: none; border: 0; color: var(--lichen); cursor: pointer; padding: 0 2px; }
+  #fbList button { display: block; width: 100%; text-align: left; background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; margin: 0 0 5px; cursor: pointer; }
+  #fbList button:hover { border-color: #4b5a52; }
+  #fbList small { color: var(--muted); }
+  #fbInfo { color: var(--muted); font-size: 13px; flex: 1; }
+  #cfList { margin: 0; padding-left: 18px; font-size: 13px; }
+  #cfList li { margin: 3px 0; overflow-wrap: anywhere; }
+  .sfrow { padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .sfrow h3 { margin: 0 0 6px; font-size: 15px; }
+  .sfrow .line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 3px 0; }
+  .sfrow .line > span.k { width: 150px; color: var(--muted); }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+  #help header, #userGalleryModal header { display: flex; justify-content: space-between; align-items: center; padding: 14px 22px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); z-index: 10; }
+  #help header h2, #userGalleryModal header h2 { margin: 0; font-size: 18px; }
+  #help .body, #userGalleryModal .body { padding: 6px 26px 24px; overflow: auto; max-height: calc(88vh - 62px); }
+  #help h3 { margin: 22px 0 6px; font-size: 16px; color: var(--lichen); }
+  #help p { margin: 6px 0; }
+  #help ul { margin: 6px 0; padding-left: 20px; }
+  #help li { margin: 3px 0; }
+  kbd { font: 12px var(--stamp); background: var(--raised); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+  @media (max-width: 640px) {
+    .card { padding: 20px; }
+    .field { grid-template-columns: 1fr; }
+    #camDetails dl { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<section id="splash" class="screen active">
+  <h1>Trail Camera Reviewer</h1>
+  <p>Loading your cameras…</p>
+</section>
+ 
+<section id="select" class="screen">
+  <div class="card">
+    <div class="cardtop">
+      <h2>Choose your assigned camera</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="instrOpenBtn" class="btn" type="button">Instructor login</button><button id="vwOpenBtn" class="btn load" type="button">View tagged photos</button></div>
+    </div>
+    <p class="sub">Select the camera you want to review. You can only claim one camera at a time.</p>
+    <div id="selErr" hidden></div>
+    <div class="field">
+      <label for="nameIn">Your name</label>
+      <select id="nameIn" class="in">
+        <option value="">Select your name</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="pinIn">Last 4 of student ID</label>
+      <input id="pinIn" class="in" type="password" placeholder="4 digits" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+    </div>
+    <div class="field" id="siteRow" hidden>
+      <label for="siteSel">Site</label>
+      <select id="siteSel" class="in"><option value="">All sites</option></select>
+    </div>
+    <div class="field">
+      <label for="camSel">Camera</label>
+      <select id="camSel" class="in"></select>
+    </div>
+    <div id="camDetails" hidden></div>
+    <div class="row-actions">
+      <button id="beginBtn" class="btn primary" disabled>Claim &amp; Begin review</button>
+      <button id="helpBtn1" class="btn help" type="button">Help</button>
+    </div>
+  </div>
+</section>
+ 
+<section id="review" class="screen">
+  <div class="controls">
+    <div class="crow">
+      <span class="cam-title" id="camTitle"></span>
+      <button class="btn" id="changeBtn" type="button">Save and Exit</button>
+      <div class="sep"></div>
+      <button class="btn" id="playBtn" type="button">Play</button>
+      <button class="btn" id="prevBtn" type="button">Previous</button>
+      <button class="btn" id="nextBtn" type="button">Next</button>
+      <button class="btn" id="zoomBtn" type="button">Reset zoom</button>
+      <button class="btn undo" id="undoBtn" type="button">Undo last tag</button>
+      <button class="btn load" id="myGalleryBtn" type="button">Tagged photos</button>
+      <details class="pop" id="textPop">
+        <summary class="btn">Overlay text</summary>
+        <div class="popbody">
+          <label style="color:var(--blue);font-weight:600"><input type="checkbox" id="tAll" checked> Show all text</label>
+          <label><input type="checkbox" id="tDate" checked> Date</label>
+          <label><input type="checkbox" id="tCam" checked> Camera</label>
+          <label><input type="checkbox" id="tFile" checked> File</label>
+          <label><input type="checkbox" id="tGps" checked> Coordinates</label>
+          <label><input type="checkbox" id="tSite" checked> Site</label>
+          <label><input type="checkbox" id="tFolder" checked> Folder</label>
+        </div>
+      </details>
+      <span class="spacer"></span>
+      <span class="lbl" id="speedLbl">Delay: 100 ms</span>
+      <input id="speed" type="range" min="30" max="2000" value="100" aria-label="Delay between images while playing, in milliseconds" style="width: 120px;">
+      <button class="btn finish" id="completeBtn" type="button">Submit &amp; Finish Review</button>
+      <button class="btn help" id="helpBtn2" type="button">Help</button>
+    </div>
+    <div class="crow">
+      <span class="lbl">File Scrub</span>
+      <input id="scrub" class="grow" type="range" min="0" max="0" value="0" aria-label="Scrub through files">
+      <span id="count"></span>
+    </div>
+    <div class="crow" id="videoBar" style="display: none; background: #162019; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin-top: 4px;">
+      <span class="lbl" style="font-weight:600; color:var(--blue); margin-right: 6px;">Video:</span>
+      <button class="btn" id="vPlayBtn" type="button">Play</button>
+      <button class="btn" id="vBack5" type="button" title="Rewind 5 seconds">5s Back</button>
+      <button class="btn" id="vBack1" type="button" title="Rewind 1 second">1s Back</button>
+      <input id="vScrub" class="grow" type="range" min="0" max="1000" value="0" aria-label="Scrub video timeline">
+      <button class="btn" id="vFwd1" type="button" title="Forward 1 second">1s Forward</button>
+      <button class="btn" id="vFwd5" type="button" title="Forward 5 seconds">5s Forward</button>
+      <button class="btn" id="vMute" type="button" title="Turn sound on or off">Sound off</button>
+      <span id="vTime" class="lbl" style="min-width: 85px; text-align: right; font-variant-numeric: tabular-nums;">0:00 / 0:00</span>
+    </div>
+  </div>
+ 
+  <div id="stage" tabindex="-1">
+    <img id="photo" alt="Trail camera frame" draggable="false">
+    <video id="vid" playsinline muted preload="auto"></video>
+    <iframe id="vidFrame" title="Drive video player" allow="autoplay; fullscreen"></iframe>
+    <div id="overlay"></div>
+    <div id="stageMsg"></div>
+    <div id="vidFail">
+      <p id="vidFailTxt"></p>
+      <div class="row-actions" style="justify-content:center">
+        <button class="btn" id="vidDriveBtn" type="button">Try Drive's player</button>
+        <button class="btn primary" id="vidSkipBtn" type="button">Next file</button>
+      </div>
+    </div>
+  </div>
+ 
+  <div class="dock">
+    <div class="crow species">
+      <span class="lbl">Species</span>
+      <div id="rows"></div>
+      <button class="btn" id="addBtn" type="button" title="Add another species">+</button>
+      <button class="btn" id="clearBtn" type="button">Clear</button>
+      <button class="btn tag" id="tagBtn" type="button">Tag species in photo</button>
+    </div>
+    <div class="crow" id="recentRow" style="display:none">
+      <span class="lbl">Recent</span>
+      <div id="recent"></div>
+      <span id="recentHint">Click, or press 1&ndash;6, to tag the current file</span>
+    </div>
+  </div>
+</section>
+ 
+<dialog id="userGalleryModal">
+  <header>
+    <h2>Tagged Photos for this Camera</h2>
+    <input id="gSearch" class="in" type="search" placeholder="Search by species or file name" autocomplete="off" spellcheck="false" aria-label="Search tagged photos">
+    <span id="gCount"></span>
+    <button class="btn" id="closeUserGalleryBtn" type="button">Back to Review</button>
+  </header>
+  <div class="body" style="padding:0;">
+    <div id="userGalleryGrid" class="gallery-grid"></div>
+  </div>
+</dialog>
+ 
+<dialog id="tagViewer">
+  <header>
+    <h2 id="tvTitle">Tagged photo</h2>
+    <span id="tvPos"></span>
+    <button class="btn" id="tvClose" type="button">Back to photos</button>
+  </header>
+  <div class="tvbody">
+    <div class="tvstage">
+      <button class="btn tvnav" id="tvPrev" type="button" aria-label="Previous tagged photo" title="Previous (left arrow)">&larr;</button>
+      <div class="tvmedia">
+        <img id="tvImg" alt="Tagged photo" style="display:none">
+        <video id="tvVid" controls playsinline muted preload="metadata"></video>
+        <div id="tvMsg"></div>
+      </div>
+      <button class="btn tvnav" id="tvNext" type="button" aria-label="Next tagged photo" title="Next (right arrow)">&rarr;</button>
+    </div>
+    <div class="tvname" id="tvName"></div>
+    <div class="tvedit">
+      <span class="lbl">Species</span>
+      <div id="tvRows"></div>
+      <button class="btn" id="tvAdd" type="button" title="Add another species">+</button>
+    </div>
+    <div class="tvactions">
+      <button class="btn tag" id="tvSave" type="button">Save new species</button>
+      <button class="btn undo" id="tvRemove" type="button">Remove tag</button>
+      <span id="tvStatus" aria-live="polite"></span>
+    </div>
+  </div>
+</dialog>
+ 
+<dialog id="vwDlg">
+  <header>
+    <h2>View tagged photos</h2>
+    <span id="vwWho"></span>
+    <button class="btn" id="vwRefresh" type="button" hidden>Refresh</button>
+    <button class="btn" id="vwClose" type="button">Close</button>
+  </header>
+  <div id="vwTabs" hidden>
+    <button type="button" data-tab="tagged" class="on">Tagged photos</button>
+    <button type="button" data-tab="setup">Camera setup</button>
+    <button type="button" data-tab="review">Review cameras</button>
+  </div>
+  <div id="vwLogin">
+    <p class="sub" style="margin-top:0">Sign in with your name and the last 4 of your student ID to browse the tagged photos of completed cameras.</p>
+    <div id="vwErr" hidden></div>
+    <div class="field">
+      <label for="vwName">Your name</label>
+      <select id="vwName" class="in"></select>
+    </div>
+    <div class="field">
+      <label for="vwPin">Last 4 of student ID</label>
+      <input id="vwPin" class="in" type="password" placeholder="4 digits" maxlength="4" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+    </div>
+    <div class="row-actions">
+      <button id="vwSignIn" class="btn primary" type="button">Sign in</button>
+    </div>
+  </div>
+  <div id="vwMain" hidden>
+    <div class="vwbar">
+      <select id="vwCam" class="in" aria-label="Camera"></select>
+      <input id="vwSearch" class="in" type="search" placeholder="Search species, camera or file name" autocomplete="off" spellcheck="false" aria-label="Search tagged photos">
+      <select id="vwSort" class="in" aria-label="Sort photos">
+        <option value="cam">Sort: Camera, then date</option>
+        <option value="new">Sort: Newest first</option>
+        <option value="old">Sort: Oldest first</option>
+        <option value="sp">Sort: Species A&ndash;Z</option>
+        <option value="stars">Sort: Most stars</option>
+        <option value="nahh">Sort: Most Nahhh</option>
+      </select>
+      <label class="chk"><input type="checkbox" id="vwMine"> My stars</label>
+      <label class="chk"><input type="checkbox" id="vwDoubt"> Nahhh only</label>
+      <span id="vwCount"></span>
+    </div>
+    <div id="vwProg" hidden></div>
+    <div id="vwScroll">
+      <div id="vwGrid" class="gallery-grid"></div>
+      <button class="btn" id="vwMore" type="button" hidden>Show more</button>
+    </div>
+  </div>
+  <div id="vwSetup" hidden>
+    <div class="vwbar">
+      <select id="suSem" class="in" aria-label="Semester"></select>
+      <select id="suSite" class="in" aria-label="Site"></select>
+      <input id="suSearch" class="in" type="search" placeholder="Search camera, site or reviewer" autocomplete="off" spellcheck="false" aria-label="Search cameras">
+      <button class="btn" id="suAdd" type="button">+ Add camera</button>
+      <button class="btn" id="suSiteBtn" type="button">Site folders…</button>
+      <button class="btn" id="suReload" type="button">Reload</button>
+      <span id="suCount" style="color:var(--muted);font-size:13px"></span>
+    </div>
+    <div id="suNote">Nothing is saved until you press <b>Save changes</b>. Camera, site, semester and dates are locked once a camera has a reviewer, is complete, or has tagged photos. Folders you choose here never move or change anything in Drive.</div>
+    <div id="suMsg"></div>
+    <div id="suScroll"><table id="suTable"></table></div>
+    <div id="suFoot">
+      <span id="suPending">No changes.</span>
+      <button class="btn" id="suDiscard" type="button" disabled>Discard changes</button>
+      <button class="btn primary" id="suSave" type="button" disabled>Save changes</button>
+    </div>
+  </div>
+  <div id="vwReview" hidden>
+    <div id="rvBody">
+      <p class="sub" style="margin-top:0;color:var(--muted)">Open any camera for review, including claimed and completed ones. Opening a camera does not claim it or change the sheet.</p>
+      <div id="rvMsg" hidden></div>
+      <div class="field"><label for="rvSem">Semester</label><select id="rvSem" class="in"></select></div>
+      <div class="field"><label for="rvSite">Site</label><select id="rvSite" class="in"></select></div>
+      <div class="field"><label for="rvCam">Camera</label><select id="rvCam" class="in"></select></div>
+      <div id="rvDetails" hidden></div>
+      <div class="row-actions">
+        <button id="rvOpen" class="btn primary" type="button" disabled>Open for review</button>
+        <button id="rvReload" class="btn" type="button">Reload list</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="fbDlg">
+  <div class="idlg-h"><h2 id="fbTitle">Choose a folder</h2><button class="btn" id="fbCancel" type="button">Cancel</button></div>
+  <div class="idlg-b">
+    <div style="display:flex;gap:8px"><input id="fbSearch" class="in" type="search" placeholder="Search all folders by name (2+ letters)" autocomplete="off" spellcheck="false"><button class="btn" id="fbGo" type="button">Search</button></div>
+    <div id="fbCrumbs"></div>
+    <div id="fbErr" style="color:var(--red);font-weight:600" hidden></div>
+    <div id="fbList"></div>
+  </div>
+  <div class="idlg-f"><span id="fbInfo"></span><button class="btn primary" id="fbUse" type="button" disabled>Use this folder</button></div>
+</dialog>
+
+<dialog id="sfDlg">
+  <div class="idlg-h"><h2>Site folders</h2><button class="btn primary" id="sfDone" type="button">Done</button></div>
+  <div class="idlg-b">
+    <p class="sub" style="margin-top:0;color:var(--muted)">Optional. A <b>photos folder</b> holds one folder per camera (the app picks the right one by camera number and dates). The <b>tagged folder</b> is where the per-camera tagged folders are created. Leave blank to use the automatic search. A folder chosen for a single camera overrides these. Press <b>Save changes</b> afterwards.</p>
+    <div id="sfBody"></div>
+  </div>
+</dialog>
+
+<dialog id="cfDlg">
+  <div class="idlg-h"><h2>Save these changes?</h2></div>
+  <div class="idlg-b">
+    <p style="margin-top:0">Only the items below will be written. Everything else in the sheet and in Drive stays exactly as it is. Each change is also recorded in the <b>Setup Change Log</b> tab.</p>
+    <ul id="cfList"></ul>
+  </div>
+  <div class="idlg-f"><button class="btn" id="cfNo" type="button">Cancel</button><button class="btn primary" id="cfYes" type="button">Save to sheet</button></div>
+</dialog>
+
+
+<dialog id="vwViewer">
+  <header>
+    <h2 id="vvTitle">Tagged photo</h2>
+    <span id="tvPos2" style="color:var(--muted);white-space:nowrap"></span>
+    <button class="btn" id="vvClose" type="button">Back to photos</button>
+  </header>
+  <div class="tvbody">
+    <div class="tvstage">
+      <button class="btn tvnav" id="vvPrev" type="button" aria-label="Previous photo" title="Previous (left arrow)">&larr;</button>
+      <div class="tvmedia">
+        <img id="vvImg" alt="Tagged photo" style="display:none">
+        <video id="vvVid" controls playsinline muted preload="metadata"></video>
+        <div id="vvMsg" style="position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:10px"></div>
+      </div>
+      <button class="btn tvnav" id="vvNext" type="button" aria-label="Next photo" title="Next (right arrow)">&rarr;</button>
+    </div>
+    <div class="tvname" id="vvName"></div>
+    <div class="vvreact">
+      <button class="btn star" id="vvStar" type="button" title="Favorite this photo">&#9734; Star</button>
+      <button class="btn nahh" id="vvNahh" type="button" title="I don't think this ID is right">Nahhh</button>
+      <span id="vvSuggSummary"></span>
+    </div>
+    <div id="vvSuggBox" hidden>
+      <div class="tvedit">
+        <span class="lbl">Suggest an ID</span>
+        <div id="vvRows"></div>
+        <button class="btn" id="vvAdd" type="button" title="Suggest another species">+</button>
+      </div>
+      <div class="tvactions">
+        <button class="btn primary" id="vvSuggSave" type="button">Save suggestion</button>
+        <span id="vvStatus" aria-live="polite"></span>
+      </div>
+    </div>
+    <div id="vvAdmin" hidden>
+      <h3>Instructor: official ID</h3>
+      <div id="vvChips"></div>
+      <div class="tvedit">
+        <span class="lbl">Official ID</span>
+        <div id="vvAdmRows"></div>
+        <button class="btn" id="vvAdmAdd" type="button" title="Add another species">+</button>
+      </div>
+      <div class="tvactions">
+        <button class="btn tag" id="vvAdmSave" type="button">Change ID everywhere</button>
+        <span id="vvAdmStatus" aria-live="polite"></span>
+      </div>
+      <div id="vvVotes"></div>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="spDlg">
+  <p id="spMsg"></p>
+  <div id="spBtns"></div>
+</dialog>
+ 
+<div id="busy"><div id="busyTxt">Working…</div></div>
+<div id="toasts" aria-live="polite"></div>
+ 
+<dialog id="help">
+  <header><h2>User guide</h2><button class="btn" id="helpClose" type="button">Close</button></header>
+  <div class="body" style="max-width: 74ch;">
+    <h3>1. Picking a camera</h3>
+    <ul>
+      <li>Select your name from the list and enter your PIN, then choose a camera. Use the Site menu to narrow the list.</li>
+      <li>Cameras already claimed by another student are disabled. You can only claim one camera at a time.</li>
+      <li>Select <b>Claim &amp; Begin review</b>. The app remembers your place, so you can close the tab and pick up later.</li>
+    </ul>
+    <h3>2. Reviewing footage</h3>
+    <ul>
+      <li><kbd>Space</kbd> plays or pauses. Clicking the picture does the same.</li>
+      <li><kbd>&larr;</kbd> and <kbd>&rarr;</kbd> move one file at a time.</li>
+      <li>The <b>File Scrub</b> slider jumps anywhere in the folder. <b>Delay</b> sets the pause between images while playing.</li>
+      <li>When reviewing a video, use the <b>Video</b> controls to scrub through the clip or jump forward and back.</li>
+      <li>Scroll or pinch to zoom, and drag to look around. Double-click or <b>Reset zoom</b> puts the picture back.</li>
+      <li><b>Overlay text</b> chooses which details show on the picture.</li>
+    </ul>
+    <h3>3. Tagging animals</h3>
+    <ul>
+      <li>Click the Species box and start typing. The best match is highlighted: press <kbd>Enter</kbd> to choose it, then <kbd>Enter</kbd> again to tag the file.</li>
+      <li>The species stays filled in for the next file, which is handy for a burst of photos of one animal. <kbd>Esc</kbd> or <b>Clear</b> empties it.</li>
+      <li>Species you used recently appear as buttons. Click one, or press <kbd>1</kbd>&ndash;<kbd>6</kbd>, to tag the current file. Press <b>Pin</b> beside a species to lock it in its slot so newer species don't replace it (<b>Pinned</b> unpins it).</li>
+      <li>If you type a species that isn't in the list, the app checks for typos and asks before adding it for everyone.</li>
+      <li><b>Undo last tag</b> (or <kbd>Ctrl</kbd>+<kbd>Z</kbd>) puts your most recent tag back.</li>
+    </ul>
+    <h3>4. Fixing an older tag</h3>
+    <ul>
+      <li>Click <b>Tagged photos</b> to see every photo you have tagged for this camera. Type in the search box to find a species or file name.</li>
+      <li>Click a photo to open it. Use the <b>&larr;</b> and <b>&rarr;</b> buttons or the arrow keys to move through the photos.</li>
+      <li>To change the species, edit the Species box (use <b>+</b> for more than one animal) and click <b>Save new species</b>. The file name and the Master Data log update right away.</li>
+      <li><b>Remove tag</b> takes the tag off completely. The photo goes back into your review queue as an untagged photo and its row is removed from the Master Data log.</li>
+    </ul>
+    <h3>5. Viewing everyone's tagged photos</h3>
+    <ul>
+      <li>On the first screen, click <b>View tagged photos</b> and sign in with your name and PIN. You can browse the tagged photos of every completed camera, one camera at a time or all together.</li>
+      <li>Search, sort, or click a photo to open it, then use the arrow keys to move through the photos.</li>
+      <li>Click <b>&#9734; Star</b> to favorite a photo. Click <b>Nahhh</b> if you think the ID is wrong, and add the species you think it is. Your instructor can see these and make the official change.</li>
+    </ul>
+    <h3>6. Finishing Up</h3>
+    <ul>
+      <li>When you have tagged all photos for your assigned camera, click <b>Submit &amp; Finish Review</b>.</li>
+      <li>This marks your camera complete and allows you to sign up for another one.</li>
+    </ul>
+  </div>
+</dialog>
+ 
+<script>
+(function () {
+  'use strict';
+  const $ = (s, r) => (r || document).querySelector(s);
+  const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const pad = n => String(n).padStart(2, '0');
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const errMsg = e => (e && e.message) ? e.message.replace(/^Exception: /, '') : String(e);
+  const TRANSIENT = /timed out|temporar|unavailable|too many times|internal error|server error|network|failed to fetch|try again/i;
+  const PREF_KEY = 'tcr_prefs';
+  const TEXT_IDS = ['tAll', 'tDate', 'tCam', 'tFile', 'tGps', 'tSite', 'tFolder'];
+ 
+  /* ---------- server calls ---------- */
+  function gs(fn, ...args) {
+    return new Promise((resolve, reject) => {
+      google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args);
+    });
+  }
+  async function gsRetry(fn, ...args) {
+    let last;
+    for (let i = 0; i < 3; i++) {
+      try { return await gs(fn, ...args); }
+      catch (e) { last = e; if (!TRANSIENT.test(errMsg(e))) throw e; await sleep(600 * (i + 1)); }
+    }
+    throw last;
+  }
+  let reloginP = null;
+  function relogin() {
+    if (!reloginP) {
+      reloginP = (S.instr ? gs('instructorRelogin', S.reviewer, S.pin, S.cfg.uniqueCamId) : gs('relogin', S.reviewer, S.pin))
+        .then(r => { S.sess = r.sess; S.token = r.token; })
+        .finally(() => { reloginP = null; });
+    }
+    return reloginP;
+  }
+  // Calls a function that needs a session; signs in again quietly if the session expired.
+  async function gsAuth(fn, ...args) {
+    try { return await gsRetry(fn, S.sess, ...args); }
+    catch (e) {
+      if (!/SESSION_EXPIRED/.test(errMsg(e))) throw e;
+      await relogin();
+      return await gsRetry(fn, S.sess, ...args);
+    }
+  }
+  let tokenP = null;
+  function refreshToken() {
+    if (!tokenP) tokenP = gsAuth('refreshToken').then(t => { S.token = t; return t; }).finally(() => { tokenP = null; });
+    return tokenP;
+  }
+ 
+  /* ---------- state ---------- */
+  const S = {
+    screen: 'splash', reviewer: '', pin: '', sess: '', token: '',
+    cams: [], camsByKey: {}, species: [], students: [], sites: [],
+    cfg: null, files: [], idx: 0,
+    cache: new Map(), blobUrls: new Map(),
+    undo: [], playing: false, playTimer: null, speedMs: 100,
+    zoom: 1, panX: 0, panY: 0,
+    busy: false, seq: 0, corrected: '', rows: [], progTimer: null, scrubTimer: null,
+    tagQueue: [], isTagging: false, drainWaiters: [], tagged: 0,
+    recent: [], pins: [], vidRetried: false, vidFailTimer: null, isVideoSeeking: false,
+  };
+ 
+  function show(name) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === name));
+    S.screen = name;
+  }
+  function toast(msg, kind) {
+    const t = el('div', 'toast ' + (kind || ''));
+    t.textContent = msg;
+    $('#toasts').appendChild(t);
+    setTimeout(() => t.remove(), kind === 'error' ? 7000 : 4000);
+  }
+  function setBusy(on, text) {
+    $('#busy').style.display = on ? 'flex' : 'none';
+    if (text) $('#busyTxt').textContent = text;
+  }
+ 
+  /* ---------- preferences (kept on this device; the PIN is never stored) ---------- */
+  function loadPrefs() { try { return JSON.parse(localStorage.getItem(PREF_KEY) || '{}'); } catch (e) { return {}; } }
+  function savePrefs() {
+    try {
+      const text = {};
+      TEXT_IDS.forEach(id => { text[id] = $('#' + id).checked; });
+      localStorage.setItem(PREF_KEY, JSON.stringify({ speed: S.speedMs, text: text, recent: S.recent, pins: S.pins }));
+    } catch (e) {}
+  }
+  function applyPrefs() {
+    const p = loadPrefs();
+    if (p.speed >= 30 && p.speed <= 2000) { S.speedMs = p.speed; $('#speed').value = p.speed; $('#speedLbl').textContent = 'Delay: ' + p.speed + ' ms'; }
+    if (p.text) TEXT_IDS.forEach(id => { if (typeof p.text[id] === 'boolean') $('#' + id).checked = p.text[id]; });
+    if (Array.isArray(p.recent)) S.recent = p.recent.filter(s => typeof s === 'string').slice(0, 6);
+    if (Array.isArray(p.pins)) S.pins = p.pins.filter(s => typeof s === 'string' && S.recent.includes(s));
+    renderRecent();
+  }
+ 
+  /* ---------- startup ---------- */
+  let bootError = '';
+  window.addEventListener('DOMContentLoaded', () => {
+    try { localStorage.removeItem('tcr_pin'); } catch (e) {}   // older versions saved the PIN here
+    wireEvents();
+    applyPrefs();
+    addRow();
+    const splash = sleep(700);
+    const boot = gs('getBootstrap').then(b => {
+      S.species = b.species;
+      S.students = b.students;
+      setCameras(b);
+      const nameSel = $('#nameIn');
+      S.students.forEach(s => {
+        const o = el('option');
+        o.value = s; o.textContent = s;
+        nameSel.appendChild(o);
+      });
+      try {
+        const savedName = localStorage.getItem('tcr_name') || '';
+        if (savedName && S.students.includes(savedName)) nameSel.value = savedName;
+      } catch (e) {}
+      renderSites();
+      renderCameras();
+    }).catch(e => { bootError = errMsg(e); });
+    Promise.all([splash, boot]).then(() => {
+      show('select');
+      if (bootError) { const b = $('#selErr'); b.hidden = false; b.textContent = 'Could not load cameras: ' + bootError; }
+      updateBegin();
+    });
+    setInterval(() => { if (S.screen === 'select' && !document.hidden && !S.busy) refreshCameras(true); }, 60000);
+  });
+ 
+  function setCameras(b) {
+    S.cams = b.cameras || [];
+    S.sites = b.sites || [];
+    S.camsByKey = {};
+    S.cams.forEach(c => { S.camsByKey[c.key] = c; });
+  }
+  async function refreshCameras(silent) {
+    try {
+      setCameras(await gsRetry('getCameras'));
+      renderSites();
+      renderCameras();
+    } catch (e) {
+      if (!silent) toast('Could not refresh the camera list: ' + errMsg(e), 'error');
+    }
+  }
+ 
+  /* ---------- camera selection ---------- */
+  function renderSites() {
+    const sel = $('#siteSel');
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">All sites</option>';
+    S.sites.forEach(s => { const o = el('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+    sel.value = S.sites.includes(prev) ? prev : '';
+    $('#siteRow').hidden = S.sites.length < 2;
+  }
+  function renderCameras() {
+    const sel = $('#camSel');
+    const previousSelection = sel.value;
+    sel.innerHTML = '<option value="">Select a camera</option>';
+    const myName = $('#nameIn').value.trim().toLowerCase();
+    const siteFilter = $('#siteSel').value;
+    let myActiveCamKey = null;
+    S.cams.forEach(c => {
+      if (myName && c.reviewer && c.reviewer.toLowerCase() === myName) myActiveCamKey = c.key;
+    });
+    S.cams.forEach(c => {
+      if (siteFilter && c.site !== siteFilter && c.key !== myActiveCamKey) return;
+      const o = el('option');
+      o.value = c.key;
+      if (myName && c.reviewer && c.reviewer.toLowerCase() !== myName) {
+        o.textContent = c.label + ' [Claimed by ' + c.reviewer + ']';
+        o.disabled = true;
+      } else if (myName && c.reviewer && c.reviewer.toLowerCase() === myName) {
+        o.textContent = c.label + ' [Your Active Review]';
+      } else {
+        o.textContent = c.label;
+      }
+      sel.appendChild(o);
+    });
+    if (myActiveCamKey) {
+      sel.value = myActiveCamKey;
+      sel.disabled = true;
+      $('#siteSel').disabled = true;
+      $('#beginBtn').textContent = 'Resume Review';
+    } else {
+      sel.disabled = false;
+      $('#siteSel').disabled = false;
+      $('#beginBtn').textContent = 'Claim & Begin review';
+      const stillThere = S.camsByKey[previousSelection] && [...sel.options].some(o => o.value === previousSelection && !o.disabled);
+      sel.value = stillThere ? previousSelection : '';
+    }
+    renderDetails();
+  }
+  function renderDetails() {
+    const c = S.camsByKey[$('#camSel').value];
+    const box = $('#camDetails');
+    if (!c) { box.hidden = true; updateBegin(); return; }
+    box.hidden = false;
+    box.innerHTML =
+      '<dl>' +
+      '<dt>Site</dt><dd>' + esc(c.site) + '</dd>' +
+      '<dt>Camera</dt><dd>' + esc(c.camId) + (c.brand ? ' (' + esc(c.brand) + ')' : '') + '</dd>' +
+      '<dt>Dates</dt><dd>' + esc(c.deployment) + ' to ' + esc(c.collection || '?') + '</dd>' +
+      (c.lat || c.lon ? '<dt>Location</dt><dd>' + esc(c.lat) + ', ' + esc(c.lon) + '</dd>' : '') +
+      '</dl>' +
+      '<div style="margin-top: 14px;"><button id="previewBtn" class="btn" type="button">Preview photo</button></div>' +
+      '<div id="previewContainer" style="margin-top: 12px; display: none; border-radius: 6px; overflow: hidden; border: 1px solid var(--line);">' +
+      '  <img id="previewImg" alt="Preview" style="width: 100%; height: auto; display: block;">' +
+      '</div>';
+    $('#previewBtn').addEventListener('click', async () => {
+      const key = $('#camSel').value;
+      if (!key) return;
+      const btn = $('#previewBtn');
+      btn.disabled = true;
+      btn.textContent = 'Loading preview…';
+      try {
+        const url = await gsRetry('getPreviewImage', key);
+        $('#previewImg').src = url;
+        $('#previewContainer').style.display = 'block';
+      } catch (e) {
+        toast('Could not load preview: ' + errMsg(e), 'error');
+      }
+      btn.textContent = 'Preview photo';
+      btn.disabled = false;
+    });
+    updateBegin();
+  }
+  function updateBegin() {
+    const key = $('#camSel').value;
+    const name = $('#nameIn').value.trim();
+    const pin = $('#pinIn').value.trim();
+    let isValid = false;
+    if (name && /^\d{4}$/.test(pin)) {
+      const activeCam = S.cams.find(c => c.reviewer && c.reviewer.toLowerCase() === name.toLowerCase());
+      if (activeCam || key) isValid = true;
+    }
+    $('#beginBtn').disabled = !isValid;
+  }
+ 
+  async function beginReview() {
+    const name = $('#nameIn').value.trim();
+    const pin = $('#pinIn').value.trim();
+    const uid = $('#camSel').value;
+    $('#selErr').hidden = true;
+    try { localStorage.setItem('tcr_name', name); } catch (e) {}
+    setBusy(true, 'Signing in and locating media folders…');
+    try {
+      if (S.tagQueue.length || S.isTagging) { setBusy(true, 'Finishing your last tags…'); await drainTags(); setBusy(true, 'Signing in and locating media folders…'); }
+      const r = await gs('authenticateAndLoad', name, pin, uid);
+      S.reviewer = r.config.reviewer; S.pin = pin;
+      S.sess = r.sess; S.token = r.token;
+      S.cfg = r.config; S.files = r.files; S.undo = []; S.tagged = 0;
+      clearImageCache();
+      S.idx = Math.min(r.startIndex || 0, Math.max(0, S.files.length - 1));
+      $('#camTitle').innerHTML = esc(S.cfg.label) + '<small>' + esc(S.cfg.site) + '</small>';
+      resetZoom();
+      show('review');
+      if (r.skipped) toast(r.skipped + ' file' + (r.skipped === 1 ? '' : 's') + ' in this folder are not photos or videos and were skipped.', 'warn');
+      await showCurrent();
+    } catch (e) {
+      toast('Login failed: ' + errMsg(e), 'error');
+      $('#selErr').hidden = false;
+      $('#selErr').textContent = errMsg(e);
+      refreshCameras(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+ 
+  /* ---------- images: cache + prefetch ---------- */
+  function driveMediaUrl(id) {
+    return 'https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?alt=media&supportsAllDrives=true';
+  }
+  function loadThumb(url) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => { (img.decode ? img.decode().catch(() => {}) : Promise.resolve()).then(() => resolve(url)); };
+      img.onerror = () => reject(new Error('thumbnail failed'));
+      img.src = url;
+    });
+  }
+  // Full-size fallback when Drive has no (or an expired) thumbnail: download straight from Drive.
+  async function fetchFull(f) {
+    const get = () => fetch(driveMediaUrl(f.id), { headers: { Authorization: 'Bearer ' + S.token } });
+    let res = await get();
+    if (res.status === 401 || res.status === 403) { await refreshToken(); res = await get(); }
+    if (!res.ok) throw new Error('Failed to download image');
+    const url = URL.createObjectURL(await res.blob());
+    S.blobUrls.set(f.id, url);
+    return { url: url };
+  }
+  function fetchImage(f) {
+    if (S.cache.has(f.id)) return S.cache.get(f.id);
+    const p = (async () => {
+      if (f.thumbUrl) {
+        try { return { url: await loadThumb(f.thumbUrl) }; } catch (e) { /* fall through */ }
+      }
+      return fetchFull(f);
+    })();
+    p.catch(() => { if (S.cache.get(f.id) === p) S.cache.delete(f.id); });
+    S.cache.set(f.id, p);
+    return p;
+  }
+  function dropCached(id) {
+    S.cache.delete(id);
+    const u = S.blobUrls.get(id);
+    if (u) { URL.revokeObjectURL(u); S.blobUrls.delete(id); }
+  }
+  function clearImageCache() {
+    S.cache.clear();
+    S.blobUrls.forEach(u => URL.revokeObjectURL(u));
+    S.blobUrls.clear();
+  }
+  function aheadCount() { return Math.min(12, Math.max(3, Math.ceil(1500 / Math.max(30, S.speedMs)))); }
+  function trimCache() {
+    const keep = new Set();
+    const a = aheadCount();
+    for (let i = S.idx - 2; i <= S.idx + a + 1; i++) if (S.files[i]) keep.add(S.files[i].id);
+    for (const id of [...S.cache.keys()]) if (!keep.has(id)) dropCached(id);
+  }
+  function prefetch() {
+    const a = aheadCount();
+    for (let i = 1; i <= a; i++) { const f = S.files[S.idx + i]; if (f && !f.isVideo) fetchImage(f).catch(() => {}); }
+    const back = S.files[S.idx - 1];
+    if (back && !back.isVideo) fetchImage(back).catch(() => {});
+    if (S.cache.size > a + 6) trimCache();
+  }
+ 
+  /* ---------- video ---------- */
+  function videoSrc(f) { return driveMediaUrl(f.id) + '&access_token=' + encodeURIComponent(S.token); }
+  function formatSec(sec) {
+    if (isNaN(sec) || sec < 0) return '0:00';
+    return Math.floor(sec / 60) + ':' + pad(Math.floor(sec % 60));
+  }
+  function updateVideoTimeDisplay() {
+    const vid = $('#vid');
+    $('#vTime').textContent = formatSec(vid.currentTime) + ' / ' + formatSec(vid.duration || 0);
+  }
+  function stepVideo(delta) {
+    const vid = $('#vid');
+    if (!vid.duration) return;
+    vid.currentTime = Math.max(0, Math.min(vid.duration, vid.currentTime + delta));
+    updateVideoTimeDisplay();
+  }
+  function hideVidFail() {
+    clearTimeout(S.vidFailTimer);
+    $('#vidFail').style.display = 'none';
+    const fr = $('#vidFrame');
+    fr.style.display = 'none';
+    if (fr.getAttribute('src')) fr.removeAttribute('src');
+  }
+  function showVidFail(f) {
+    const isAvi = /\.avi$/i.test(f.name);
+    $('#vidFailTxt').textContent = isAvi
+      ? 'AVI videos usually cannot play in a web browser. Try the Drive player, or move on to the next file.'
+      : 'This video could not be loaded.';
+    $('#vidFail').style.display = 'flex';
+  }
+  function showVideoUI(on) {
+    const vid = $('#vid');
+    const vBar = $('#videoBar');
+    if (on) {
+      vid.style.display = 'block';
+      vBar.style.display = 'flex';
+      vid.muted = $('#vMute').dataset.on !== '1';
+      $('#vPlayBtn').textContent = 'Play';
+      $('#vScrub').value = 0;
+      $('#vTime').textContent = '0:00 / 0:00';
+    } else {
+      vid.style.display = 'none';
+      vBar.style.display = 'none';
+      vid.pause();
+      vid.removeAttribute('src');
+      vid.removeAttribute('poster');
+      vid.load();
+      hideVidFail();
+    }
+  }
+  async function onVideoError() {
+    const vid = $('#vid');
+    if (!vid.getAttribute('src')) return;
+    const f = S.files[S.idx];
+    if (!f || !f.isVideo) return;
+    const seq = S.seq;
+    if (!S.vidRetried) {          // the access token may simply have expired
+      S.vidRetried = true;
+      try { await refreshToken(); } catch (e) {}
+      if (seq !== S.seq) return;
+      vid.src = videoSrc(f);
+      vid.load();
+      if (S.playing) vid.play().catch(() => {});
+      return;
+    }
+    stageMessage('');
+    showVidFail(f);
+    if (S.playing) {
+      clearTimeout(S.vidFailTimer);
+      S.vidFailTimer = setTimeout(() => { if (seq === S.seq && S.playing) advanceFromVideo(); }, 1500);
+    }
+  }
+  async function advanceFromVideo() {
+    if (!S.playing) return;
+    const moved = await goNext();
+    if (!S.playing) return;
+    if (!moved) { pause(); return; }
+    const f = S.files[S.idx];
+    if (f && !f.isVideo) S.playTimer = setTimeout(tick, S.speedMs);
+  }
+ 
+  /* ---------- showing the current file ---------- */
+  function updateCounters() {
+    const n = S.files.length;
+    $('#scrub').max = Math.max(0, n - 1);
+    $('#scrub').value = S.idx;
+    $('#count').textContent = n ? 'File ' + (S.idx + 1) + ' of ' + n + (S.tagged ? ' · ' + S.tagged + ' tagged' : '') : (S.tagged ? 'No files · ' + S.tagged + ' tagged' : 'No files');
+  }
+  function stageMessage(text, spinner) {
+    const m = $('#stageMsg');
+    m.innerHTML = '';
+    if (text) {
+      if (spinner) m.appendChild(el('span', 'spin'));
+      m.appendChild(document.createTextNode(text));
+    }
+    m.style.display = text ? 'flex' : 'none';
+  }
+  async function showCurrent() {
+    const seq = ++S.seq;
+    updateCounters();
+    S.vidRetried = false;
+    if (!S.files.length) {
+      $('#photo').style.display = 'none';
+      showVideoUI(false);
+      $('#overlay').innerHTML = '';
+      stageMessage('All caught up. Click "Submit & Finish Review" to clear this camera from your account.');
+      return;
+    }
+    const f = S.files[S.idx];
+    S.corrected = f.time;
+    refreshOverlay();
+    hideVidFail();
+    if (f.isVideo) {
+      $('#photo').style.display = 'none';
+      showVideoUI(true);
+      stageMessage('Loading video…', true);
+      const vid = $('#vid');
+      if (f.thumbUrl) vid.poster = f.thumbUrl; else vid.removeAttribute('poster');
+      vid.src = videoSrc(f);
+      vid.load();
+      applyTransform();
+      if (S.playing) vid.play().catch(() => {});
+      return;
+    }
+    showVideoUI(false);
+    if (!S.cache.has(f.id)) stageMessage('Loading…', true);
+    try {
+      const c = await fetchImage(f);
+      if (seq !== S.seq) return;
+      const photo = $('#photo');
+      photo.src = c.url;
+      photo.style.display = 'block';
+      applyTransform();
+      stageMessage('');
+      prefetch();
+    } catch (e) {
+      if (seq !== S.seq) return;
+      $('#photo').style.display = 'none';
+      stageMessage('Could not load this file. Press → to continue.');
+    }
+  }
+  function refreshOverlay() {
+    const o = $('#overlay');
+    o.innerHTML = '';
+    if (!S.files.length || !$('#tAll').checked) return;
+    const f = S.files[S.idx];
+    const add = t => { const d = el('div', 'chip'); d.textContent = t; o.appendChild(d); };
+    if ($('#tDate').checked) add(S.corrected || f.time);
+    if ($('#tCam').checked) add('Camera: ' + S.cfg.camId);
+    if ($('#tSite').checked) add('Site: ' + S.cfg.site);
+    if ($('#tGps').checked) add('Coords: ' + S.cfg.lat + ', ' + S.cfg.lon);
+    if ($('#tFile').checked) add('File: ' + f.name);
+    if ($('#tFolder').checked) add('Folder: ' + f.folder);
+  }
+ 
+  /* ---------- navigation and playback ---------- */
+  async function goNext() {
+    if (S.idx >= S.files.length - 1) return false;
+    S.idx++; saveProgressSoon(); await showCurrent(); return true;
+  }
+  async function goPrev() {
+    if (S.idx <= 0) return false;
+    S.idx--; saveProgressSoon(); await showCurrent(); return true;
+  }
+  function manualNext() { if (S.busy) return; pause(); goNext(); }
+  function manualPrev() { if (S.busy) return; pause(); goPrev(); }
+  function updatePlayBtn() {
+    const b = $('#playBtn');
+    b.textContent = S.playing ? 'Pause' : 'Play';
+    b.classList.toggle('on', S.playing);
+  }
+  function play() {
+    if (S.playing || !S.files.length || S.busy) return;
+    S.playing = true; updatePlayBtn();
+    const f = S.files[S.idx];
+    if (f && f.isVideo) {
+      const vid = $('#vid');
+      if (vid.getAttribute('src')) vid.play().catch(() => {});
+    } else {
+      S.playTimer = setTimeout(tick, S.speedMs);
+    }
+  }
+  function pause() {
+    S.playing = false; clearTimeout(S.playTimer); updatePlayBtn();
+    const f = S.files[S.idx];
+    if (f && f.isVideo) $('#vid').pause();
+  }
+  async function tick() {
+    if (!S.playing) return;
+    const moved = await goNext();
+    if (!S.playing) return;
+    if (!moved) { pause(); return; }
+    const f = S.files[S.idx];
+    if (f && f.isVideo) return;        // the video's 'ended' (or failure) handler carries on
+    S.playTimer = setTimeout(tick, S.speedMs);
+  }
+  function togglePlay() { S.playing ? pause() : play(); }
+ 
+  /* ---------- zoom and pan ---------- */
+  let tfRaf = 0;
+  function applyTransform() {
+    if (tfRaf) return;
+    tfRaf = requestAnimationFrame(() => {
+      tfRaf = 0;
+      const t = 'translate(' + S.panX + 'px,' + S.panY + 'px) scale(' + S.zoom + ')';
+      $('#photo').style.transform = t;
+      $('#vid').style.transform = t;
+    });
+  }
+  function resetZoom() { S.zoom = 1; S.panX = 0; S.panY = 0; applyTransform(); }
+  function zoomAt(cx, cy, factor) {
+    const nz = Math.min(20, Math.max(0.25, S.zoom * factor));
+    const k = nz / S.zoom;
+    S.panX = cx - (cx - S.panX) * k;
+    S.panY = cy - (cy - S.panY) * k;
+    S.zoom = nz;
+    applyTransform();
+  }
+  function mediaVisible() { return $('#photo').style.display !== 'none' || $('#vid').style.display !== 'none'; }
+  function wireStage() {
+    const stage = $('#stage');
+    const overUi = e => e.target.closest && e.target.closest('#vidFail, #vidFrame');
+    const rel = (x, y) => { const r = stage.getBoundingClientRect(); return { x: x - r.left - r.width / 2, y: y - r.top - r.height / 2 }; };
+    stage.addEventListener('wheel', e => {
+      if (S.screen !== 'review' || !mediaVisible() || overUi(e)) return;
+      e.preventDefault();
+      const dy = (e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY);
+      const p = rel(e.clientX, e.clientY);
+      zoomAt(p.x, p.y, Math.exp(-Math.max(-120, Math.min(120, dy)) * 0.0016));
+    }, { passive: false });
+    stage.addEventListener('dblclick', e => { if (!overUi(e)) resetZoom(); });
+ 
+    const ptrs = new Map();
+    let drag = null, pinchDist = 0, gesture = false;
+    stage.addEventListener('pointerdown', e => {
+      if (overUi(e)) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+      if (ptrs.size === 1) {
+        drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY };
+        gesture = false;
+        stage.classList.add('dragging');
+      } else if (ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()];
+        pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
+        gesture = true; drag = null;
+      }
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    });
+    stage.addEventListener('pointermove', e => {
+      if (!ptrs.has(e.pointerId)) return;
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ptrs.size >= 2) {
+        const [a, b] = [...ptrs.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        const m = rel((a.x + b.x) / 2, (a.y + b.y) / 2);
+        if (pinchDist > 0 && d > 0) zoomAt(m.x, m.y, d / pinchDist);
+        pinchDist = d;
+        return;
+      }
+      if (!drag) return;
+      S.panX += e.clientX - drag.x; S.panY += e.clientY - drag.y;
+      drag.x = e.clientX; drag.y = e.clientY;
+      applyTransform();
+    });
+    const end = e => {
+      if (!ptrs.has(e.pointerId)) return;
+      ptrs.delete(e.pointerId);
+      if (ptrs.size === 1) {
+        const rest = [...ptrs.values()][0];
+        drag = { x: rest.x, y: rest.y, sx: rest.x, sy: rest.y };
+        return;
+      }
+      if (ptrs.size > 0) return;
+      const d = drag;
+      drag = null; stage.classList.remove('dragging');
+      if (!d || gesture) { gesture = false; return; }
+      const moved = Math.abs(e.clientX - d.sx) + Math.abs(e.clientY - d.sy);
+      if (moved < 5) {
+        const f = S.files[S.idx];
+        if (f && f.isVideo) {
+          const vid = $('#vid');
+          if (vid.getAttribute('src')) vid.paused ? vid.play().catch(() => {}) : vid.pause();
+        } else if ($('#photo').style.display !== 'none') {
+          togglePlay();
+        }
+      }
+    };
+    stage.addEventListener('pointerup', end);
+    stage.addEventListener('pointercancel', e => { gesture = true; end(e); });
+  }
+ 
+  /* ---------- species entry ---------- */
+  function makeAC(onEnter) {
+    const wrap = el('div', 'ac');
+    const input = el('input');
+    input.type = 'text'; input.placeholder = 'Type a species'; input.autocomplete = 'off'; input.spellcheck = false;
+    input.setAttribute('aria-label', 'Species');
+    const arrow = el('button', 'arrow'); arrow.type = 'button'; arrow.tabIndex = -1; arrow.textContent = '▾';
+    arrow.setAttribute('aria-label', 'Show all species');
+    const list = el('ul', 'ac-list'); list.hidden = true;
+    wrap.append(input, arrow, list);
+    let items = [], hi = -1;
+    const isHdr = t => t.startsWith('|||');
+    function render(arr) {
+      items = arr; hi = -1; list.innerHTML = '';
+      arr.forEach(t => {
+        const li = el('li', isHdr(t) ? 'hdr' : '');
+        li.textContent = isHdr(t) ? t.replace(/\|+/g, '').trim() : t;
+        if (!isHdr(t)) li.addEventListener('mousedown', ev => { ev.preventDefault(); pick(t); });
+        list.appendChild(li);
+      });
+      list.hidden = arr.length === 0;
+    }
+    function setHi(n) {
+      hi = n;
+      [...list.children].forEach((li, i) => li.classList.toggle('hi', i === hi));
+      if (list.children[hi]) list.children[hi].scrollIntoView({ block: 'nearest' });
+    }
+    function close() { list.hidden = true; hi = -1; }
+    function open(all) {
+      const typed = input.value.trim().toLowerCase();
+      let arr;
+      if (all || !typed) {
+        arr = S.species;
+      } else {
+        const pool = S.species.filter(s => !isHdr(s));
+        const starts = pool.filter(s => s.toLowerCase().startsWith(typed));
+        const has = pool.filter(s => !s.toLowerCase().startsWith(typed) && s.toLowerCase().includes(typed));
+        arr = starts.concat(has);
+      }
+      render(arr);
+      if (!all && typed) { const first = arr.findIndex(t => !isHdr(t)); if (first >= 0) setHi(first); }
+    }
+    function pick(t) { input.value = t; close(); input.focus(); }
+    function move(dir) {
+      if (list.hidden) { open(true); return; }
+      let n = hi;
+      do { n += dir; } while (n >= 0 && n < items.length && isHdr(items[n]));
+      if (n < 0 || n >= items.length) return;
+      setHi(n);
+    }
+    input.addEventListener('input', () => { input.value.trim() ? open(false) : close(); });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+      else if (e.key === 'Enter') {
+        e.preventDefault(); e.stopPropagation();
+        if (!list.hidden && hi >= 0) { pick(items[hi]); return; }   // first Enter chooses the match
+        if (input.value.trim()) { close(); input.blur(); (onEnter || tagCurrent)(); } // next Enter tags / saves
+      } else if (e.key === 'Escape' && !list.hidden) { e.preventDefault(); e.stopPropagation(); close(); }
+    });
+    input.addEventListener('blur', () => setTimeout(close, 120));
+    arrow.addEventListener('mousedown', e => e.preventDefault());
+    arrow.addEventListener('click', () => { list.hidden ? open(true) : close(); input.focus(); });
+    return { wrap, input };
+  }
+  function addRow() {
+    const row = el('div', 'sprow');
+    const ac = makeAC();
+    const x = el('button', 'xbtn'); x.type = 'button'; x.textContent = 'X'; x.title = 'Remove this species';
+    row.append(ac.wrap, x);
+    const rec = { row, input: ac.input };
+    x.addEventListener('click', () => removeRow(rec));
+    S.rows.push(rec);
+    $('#rows').appendChild(row);
+    if (S.screen === 'review') ac.input.focus();
+  }
+  function removeRow(rec) {
+    if (S.rows.length > 1) { S.rows = S.rows.filter(r => r !== rec); rec.row.remove(); }
+    else rec.input.value = '';
+  }
+  function clearRows() {
+    S.rows.slice(1).forEach(r => r.row.remove());
+    S.rows = [S.rows[0]];
+    S.rows[0].input.value = '';
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  }
+  function setRowsTo(list) {
+    S.rows.slice(1).forEach(r => r.row.remove());
+    S.rows = [S.rows[0]];
+    S.rows[0].input.value = list[0] || '';
+    for (let i = 1; i < list.length; i++) { addRow(); S.rows[i].input.value = list[i]; }
+  }
+ 
+  // Spelling helpers: ask before a new species is added for everyone.
+  function editDistance(a, b) {
+    a = a.toLowerCase(); b = b.toLowerCase();
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+  function nearestSpecies(v, known) {
+    const limit = v.length >= 5 ? 2 : 1;
+    let best = null, bestD = 99;
+    known.forEach(k => { const d = editDistance(v, k); if (d < bestD) { bestD = d; best = k; } });
+    return bestD <= limit ? best : null;
+  }
+  function askSpecies(v, near) {
+    return new Promise(resolve => {
+      const dlg = $('#spDlg'), btns = $('#spBtns');
+      btns.innerHTML = '';
+      let done = false;
+      const finish = val => { if (done) return; done = true; if (dlg.open) dlg.close(); resolve(val); };
+      $('#spMsg').textContent = near
+        ? '"' + v + '" is not in the species list. Did you mean "' + near + '"?'
+        : '"' + v + '" is not in the species list. Add it as a new species for everyone?';
+      const mk = (txt, cls, val) => {
+        const b = el('button', 'btn ' + cls); b.type = 'button'; b.textContent = txt;
+        b.addEventListener('click', () => finish(val));
+        btns.appendChild(b);
+      };
+      if (near) mk('Use "' + near + '"', 'primary', near);
+      mk('Add "' + v + '" as new', near ? '' : 'primary', v);
+      mk('Cancel', '', null);
+      dlg.addEventListener('close', () => finish(null), { once: true });
+      dlg.showModal();
+      btns.firstChild.focus();
+    });
+  }
+  async function resolveSpecies(vals) {
+    const known = S.species.filter(s => !s.startsWith('|||'));
+    const lookup = new Map(known.map(s => [s.toLowerCase(), s]));
+    const out = [];
+    for (const v of vals) {
+      const hit = lookup.get(v.toLowerCase());
+      if (hit) { out.push(hit); continue; }
+      if (/^[=+\-@|]/.test(v) || v.length > 80) { toast('"' + v + '" is not a valid species name.', 'error'); return null; }
+      const choice = await askSpecies(v, nearestSpecies(v, known));
+      if (choice === null) return null;
+      out.push(choice);
+      lookup.set(choice.toLowerCase(), choice);
+    }
+    return out;
+  }
+ 
+  /* ---------- recent species ---------- */
+  // Pinned species come first, so their number keys stay put while the others rotate.
+  function recentOrder() { return S.recent.filter(x => S.pins.includes(x)).concat(S.recent.filter(x => !S.pins.includes(x))); }
+  function renderRecent() {
+    const box = $('#recent');
+    box.innerHTML = '';
+    recentOrder().forEach((s, i) => {
+      const pinned = S.pins.includes(s);
+      const w = el('span', 'rwrap' + (pinned ? ' pinned' : ''));
+      const b = el('button', 'rchip'); b.type = 'button';
+      const k = el('kbd'); k.textContent = String(i + 1);
+      b.append(k, document.createTextNode(s));
+      b.title = 'Tag the current file as ' + s;
+      b.addEventListener('click', () => tagRecent(i));
+      const p = el('button', 'rpin'); p.type = 'button';
+      p.textContent = pinned ? 'Pinned' : 'Pin';
+      p.title = pinned ? 'Unpin: this species can be replaced by newer ones again' : 'Pin: keep ' + s + ' in this key slot';
+      p.addEventListener('click', () => {
+        S.pins = pinned ? S.pins.filter(x => x !== s) : S.pins.concat(s);
+        renderRecent(); savePrefs();
+      });
+      w.append(b, p);
+      box.appendChild(w);
+    });
+    $('#recentRow').style.display = S.recent.length ? 'flex' : 'none';
+  }
+  function noteRecent(list) {
+    list.forEach(s => {
+      if (S.recent.includes(s)) return;
+      if (S.recent.length >= 6) {
+        const at = S.recent.findIndex(x => !S.pins.includes(x));
+        if (at < 0) return;                      // all six slots are pinned
+        S.recent.splice(at, 1);
+      }
+      S.recent.push(s);
+    });
+    renderRecent(); savePrefs();
+  }
+  function tagRecent(i) {
+    const s = recentOrder()[i];
+    if (!s || S.screen !== 'review') return;
+    setRowsTo([s]);
+    tagCurrent();
+  }
+ 
+  /* ---------- tagging (batched, in the background) ---------- */
+  function cmpFile(a, b) { return a.time < b.time ? -1 : a.time > b.time ? 1 : a.name.localeCompare(b.name); }
+  function insertSorted(f) {
+    let at = 0;
+    while (at < S.files.length && cmpFile(S.files[at], f) < 0) at++;
+    S.files.splice(at, 0, f);
+    return at;
+  }
+  function reinsertQuiet(f) {
+    const wasEmpty = S.files.length === 0;
+    const at = insertSorted(f);
+    if (wasEmpty) { S.idx = 0; updateCounters(); showCurrent(); return; }
+    if (at <= S.idx) S.idx++;
+    updateCounters();
+  }
+  function removeAt(i) {
+    const f = S.files[i];
+    if (f) dropCached(f.id);
+    S.files.splice(i, 1);
+    if (S.idx >= S.files.length) S.idx = S.files.length - 1;
+    if (S.idx < 0) S.idx = 0;
+  }
+  function drainTags() {
+    if (!S.isTagging && !S.tagQueue.length) return Promise.resolve();
+    return new Promise(r => S.drainWaiters.push(r));
+  }
+  function flushDrain() {
+    const w = S.drainWaiters; S.drainWaiters = [];
+    w.forEach(r => r());
+  }
+  async function processTagQueue() {
+    if (S.isTagging) return;
+    if (!S.tagQueue.length) { flushDrain(); return; }
+    S.isTagging = true;
+    const batch = S.tagQueue.splice(0, 10);
+    const cur = S.files[S.idx];
+    let resp = null, err = null;
+    try {
+      resp = await gsAuth('tagFiles', batch.map(t => t.payload), { fileId: cur ? cur.id : '', idx: S.idx });
+    } catch (e) { err = e; }
+    if (err) {
+      toast('Could not save ' + batch.length + ' tag' + (batch.length === 1 ? '' : 's') + ': ' + errMsg(err), 'error');
+      batch.forEach(t => { reinsertQuiet(t.f); S.tagged = Math.max(0, S.tagged - 1); });
+      updateCounters();
+    } else {
+      if (Array.isArray(resp.species) && resp.species.length) S.species = resp.species;
+      if (resp.logWarning) toast(resp.logWarning, 'warn');
+      (resp.results || []).forEach((res, i) => {
+        const t = batch[i];
+        if (!t) return;
+        if (res.error === 'missing') {
+          toast('A file was already tagged or moved, so it was skipped.', 'warn');
+          S.tagged = Math.max(0, S.tagged - 1);
+        } else if (res.error) {
+          toast('Could not tag ' + t.f.name + ': ' + res.error, 'error');
+          reinsertQuiet(t.f);
+          S.tagged = Math.max(0, S.tagged - 1);
+        } else if (!res.noUndo) {
+          S.undo.push({
+            newFileId: res.newFileId, originalParentId: res.originalParentId,
+            originalName: res.originalName, newName: res.newName, file: t.f,
+          });
+          if (S.undo.length > 50) S.undo.shift();
+        }
+      });
+      updateCounters();
+    }
+    S.isTagging = false;
+    processTagQueue();
+  }
+  async function tagCurrent() {
+    if (S.screen !== 'review' || !S.files.length || S.busy) return;
+    const rowsWithVal = S.rows.filter(r => r.input.value.trim());
+    const vals = rowsWithVal.map(r => r.input.value.trim());
+    if (!vals.length) { toast('Please enter a species name.', 'warn'); S.rows[0].input.focus(); return; }
+    pause();                        // never let the play timer skip past the next file
+    S.busy = true;
+    let resolved;
+    try { resolved = await resolveSpecies(vals); } finally { S.busy = false; }
+    if (!resolved) return;
+    rowsWithVal.forEach((r, i) => { r.input.value = resolved[i]; });
+    const f = S.files[S.idx];
+    if (!f) return;
+    const payload = { fileId: f.id, species: resolved, originalTime: f.time, correctedTime: S.corrected };
+    noteRecent(resolved);
+    removeAt(S.idx);
+    S.tagged++;
+    S.tagQueue.push({ payload: payload, f: f });
+    processTagQueue();
+    await showCurrent();
+  }
+  async function undoLast() {
+    if (S.busy || S.screen !== 'review') return;
+    pause();
+    if (S.tagQueue.length) {          // the last tag has not been sent yet: just take it back
+      const task = S.tagQueue.pop();
+      S.idx = insertSorted(task.f);
+      S.tagged = Math.max(0, S.tagged - 1);
+      saveProgressSoon(true);
+      await showCurrent();
+      return;
+    }
+    if (S.isTagging) {
+      S.busy = true; setBusy(true, 'Finishing your last tags…');
+      try { await drainTags(); } finally { S.busy = false; setBusy(false); }
+    }
+    if (!S.undo.length) { toast('No previous actions to undo.', 'warn'); return; }
+    const u = S.undo.pop();
+    S.busy = true;
+    setBusy(true, 'Undoing…');
+    try {
+      const r = await gsAuth('undoTag', {
+        newFileId: u.newFileId, originalParentId: u.originalParentId,
+        originalName: u.originalName, newName: u.newName,
+      });
+      if (r.error) throw new Error(r.error);
+      if (r.warning) toast(r.warning, 'warn');
+      S.idx = insertSorted(u.file);
+      S.tagged = Math.max(0, S.tagged - 1);
+      saveProgressSoon(true);
+    } catch (e) {
+      S.undo.push(u);
+      toast('Could not undo: ' + errMsg(e), 'error');
+    } finally {
+      S.busy = false;
+      setBusy(false);
+    }
+    await showCurrent();
+  }
+  function saveProgressSoon(now) {
+    clearTimeout(S.progTimer);
+    const run = () => {
+      if (!S.cfg || !S.sess) return;
+      const f = S.files[S.idx];
+      gsAuth('saveProgress', f ? f.id : '', S.idx).catch(() => {});
+    };
+    if (now) run(); else S.progTimer = setTimeout(run, 4000);
+  }
+ 
+  /* ---------- tagged photos: browse, change a species, remove a tag ---------- */
+  const G = { all: [], view: [], vi: -1, rows: [], busy: false, seq: 0, blobs: new Map() };
+  const speciesText = p => (p.species && p.species.length) ? p.species.join(', ') : '';
+  const NO_THUMB = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100%" height="100%" fill="%23333"/><text x="50%" y="50%" fill="white" font-family="sans-serif" font-size="12" text-anchor="middle" dominant-baseline="middle">No Thumb</text></svg>';
+
+  function applyGalleryFilter() {
+    const q = $('#gSearch').value.trim().toLowerCase();
+    G.view = !q ? G.all.slice() : G.all.filter(p => (speciesText(p) + ' ' + p.name).toLowerCase().includes(q));
+    renderGallery();
+  }
+  function renderGallery() {
+    const gridEl = $('#userGalleryGrid');
+    gridEl.innerHTML = '';
+    const total = G.all.length;
+    $('#gCount').textContent = total ? (G.view.length === total ? total + ' photo' + (total === 1 ? '' : 's') : 'Showing ' + G.view.length + ' of ' + total) : '';
+    if (!G.view.length) {
+      const d = el('div');
+      d.style.cssText = 'color:var(--muted); text-align:center; padding: 20px; grid-column: 1 / -1;';
+      d.textContent = total ? 'No tagged photos match your search.' : 'No tagged photos yet.';
+      gridEl.appendChild(d);
+      return;
+    }
+    G.view.forEach((p, i) => {
+      const item = el('div', 'gallery-item');
+      item.tabIndex = 0;
+      item.setAttribute('role', 'button');
+      const img = el('img');
+      img.loading = 'lazy'; img.decoding = 'async'; img.alt = p.name;
+      img.src = p.thumb || NO_THUMB;
+      if (p.isVideo) { item.style.border = '2px solid var(--blue)'; item.title = 'Video: ' + p.name; }
+      const sp = el('div', 'sp' + (speciesText(p) ? '' : ' unknown'));
+      sp.textContent = speciesText(p) || 'Species unknown';
+      const name = el('div', 'name');
+      name.textContent = p.name; name.title = p.name;
+      item.append(img, sp, name);
+      const open = () => openViewer(i);
+      item.addEventListener('click', open);
+      item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+      gridEl.appendChild(item);
+    });
+  }
+
+  async function tagBlob(p) {
+    if (G.blobs.has(p.id)) return G.blobs.get(p.id);
+    const get = () => fetch(driveMediaUrl(p.id), { headers: { Authorization: 'Bearer ' + S.token } });
+    let res = await get();
+    if (res.status === 401 || res.status === 403) { await refreshToken(); res = await get(); }
+    if (!res.ok) throw new Error('Failed to download image');
+    const url = URL.createObjectURL(await res.blob());
+    G.blobs.set(p.id, url);
+    return url;
+  }
+  function clearTagBlobs() { G.blobs.forEach(u => URL.revokeObjectURL(u)); G.blobs.clear(); }
+
+  function viewerAddRow(value) {
+    const row = el('div', 'sprow');
+    const ac = makeAC(saveTagChange);
+    const x = el('button', 'xbtn'); x.type = 'button'; x.textContent = 'X'; x.title = 'Remove this species';
+    row.append(ac.wrap, x);
+    const rec = { row, input: ac.input };
+    ac.input.value = value || '';
+    x.addEventListener('click', () => {
+      if (G.rows.length > 1) { G.rows = G.rows.filter(r => r !== rec); row.remove(); }
+      else rec.input.value = '';
+    });
+    G.rows.push(rec);
+    $('#tvRows').appendChild(row);
+    return rec;
+  }
+  function viewerSetRows(list) {
+    $('#tvRows').innerHTML = '';
+    G.rows = [];
+    (list && list.length ? list : ['']).forEach(v => viewerAddRow(v));
+  }
+  function viewerControls() {
+    const dis = G.busy;
+    $('#tvPrev').disabled = dis || G.vi <= 0;
+    $('#tvNext').disabled = dis || G.vi >= G.view.length - 1;
+    ['#tvSave', '#tvRemove', '#tvAdd'].forEach(id => { $(id).disabled = dis; });
+    G.rows.forEach(r => { r.input.disabled = dis; });
+  }
+  function setViewerBusy(on, text) {
+    G.busy = on;
+    $('#tvStatus').textContent = text || '';
+    viewerControls();
+  }
+  function viewerHeader(p) {
+    $('#tvTitle').textContent = speciesText(p) || 'Species unknown';
+    $('#tvPos').textContent = (G.vi + 1) + ' of ' + G.view.length;
+    $('#tvName').textContent = p.name;
+  }
+  function openViewer(i) {
+    G.vi = i;
+    const dlg = $('#tagViewer');
+    if (!dlg.open) dlg.showModal();
+    showTagged();
+  }
+  function closeViewer() { const d = $('#tagViewer'); if (d.open) d.close(); }
+  function stepViewer(d) {
+    if (G.busy) return;
+    const n = G.vi + d;
+    if (n < 0 || n >= G.view.length) return;
+    G.vi = n;
+    showTagged();
+  }
+  async function showTagged() {
+    const p = G.view[G.vi];
+    if (!p) { closeViewer(); return; }
+    const seq = ++G.seq;
+    viewerHeader(p);
+    viewerSetRows(p.species || []);
+    viewerControls();
+    const img = $('#tvImg'), vid = $('#tvVid'), msg = $('#tvMsg');
+    const say = t => { msg.textContent = t || ''; msg.style.display = t ? 'flex' : 'none'; };
+    vid.pause(); vid.removeAttribute('src'); vid.load(); vid.style.display = 'none';
+    img.style.display = 'none';
+    // warm up the neighbours so the arrow keys feel quick
+    [G.view[G.vi + 1], G.view[G.vi - 1]].forEach(n => { if (n && n.big && !n.isVideo) { const w = new Image(); w.src = n.big; } });
+    if (p.isVideo) {
+      say('');
+      if (p.big) vid.poster = p.big; else vid.removeAttribute('poster');
+      vid.src = videoSrc(p);
+      vid.style.display = 'block';
+      vid.load();
+      return;
+    }
+    say('Loading…');
+    let url = null;
+    if (p.big) { try { url = await loadThumb(p.big); } catch (e) { url = null; } }
+    if (seq !== G.seq) return;
+    if (!url) { try { url = await tagBlob(p); } catch (e) { url = null; } }
+    if (seq !== G.seq) return;
+    if (!url) { say('Could not load this photo.'); return; }
+    img.src = url;
+    img.style.display = 'block';
+    say('');
+  }
+
+  async function saveTagChange() {
+    if (G.busy) return;
+    const p = G.view[G.vi];
+    if (!p) return;
+    const withVal = G.rows.filter(r => r.input.value.trim());
+    const vals = withVal.map(r => r.input.value.trim());
+    if (!vals.length) { toast('Enter a species name, or use Remove tag to take the tag off.', 'warn'); if (G.rows[0]) G.rows[0].input.focus(); return; }
+    if (vals.join('|').toLowerCase() === (p.species || []).join('|').toLowerCase()) { toast('The species has not changed.', 'warn'); return; }
+    const myPhoto = p;
+    setViewerBusy(true, 'Checking species…');
+    let resolved;
+    try { resolved = await resolveSpecies(vals); }
+    catch (e) { resolved = null; }
+    if (!resolved) { setViewerBusy(false, ''); return; }
+    withVal.forEach((r, i) => { r.input.value = resolved[i]; });
+    setViewerBusy(true, 'Saving…');
+    try {
+      const r = await gsAuth('changeTaggedSpecies', myPhoto.id, resolved);
+      if (r.error) throw new Error(r.error);
+      if (Array.isArray(r.speciesList) && r.speciesList.length) S.species = r.speciesList;
+      if (r.warning) toast(r.warning, 'warn');
+      myPhoto.name = r.name;
+      myPhoto.species = r.species;
+      S.undo.forEach(u => { if (u.newFileId === myPhoto.id) u.newName = r.name; });
+      if (G.view[G.vi] === myPhoto) { viewerHeader(myPhoto); viewerSetRows(myPhoto.species); }
+      renderGallery();
+      toast('Species changed to ' + r.species.join(', ') + '.', 'ok');
+      setViewerBusy(false, 'Saved.');
+    } catch (e) {
+      toast('Could not change the species: ' + errMsg(e), 'error');
+      setViewerBusy(false, '');
+    }
+  }
+
+  async function removeTag() {
+    if (G.busy) return;
+    const p = G.view[G.vi];
+    if (!p) return;
+    if (!confirm('Remove the tag from this photo?\n\nIt goes back into your review queue as an untagged photo, and its row is deleted from the Master Data log.')) return;
+    setViewerBusy(true, 'Removing tag…');
+    try {
+      const r = await gsAuth('removeTaggedPhoto', p.id);
+      if (r.error) throw new Error(r.error);
+      if (r.warning) toast(r.warning, 'warn');
+      // The tag no longer exists, so it can't be undone any more.
+      const before = S.undo.length;
+      S.undo = S.undo.filter(u => u.newFileId !== p.id);
+      if (S.undo.length < before) S.tagged = Math.max(0, S.tagged - 1);
+      // Back into the review queue, in its time-ordered place, without moving the current photo.
+      if (!S.files.some(f => f.id === r.file.id)) reinsertQuiet(r.file);
+      saveProgressSoon();
+      const ai = G.all.indexOf(p); if (ai >= 0) G.all.splice(ai, 1);
+      G.view.splice(G.vi, 1);
+      G.busy = false;
+      renderGallery();
+      toast('Tag removed. The photo is back in your review queue.', 'ok');
+      if (!G.view.length) { closeViewer(); return; }
+      G.vi = Math.min(G.vi, G.view.length - 1);
+      $('#tvStatus').textContent = '';
+      showTagged();
+    } catch (e) {
+      toast('Could not remove the tag: ' + errMsg(e), 'error');
+      setViewerBusy(false, '');
+    }
+  }
+
+  /* ---------- view tagged photos: every completed camera, stars, Nahhh, suggestions ---------- */
+  const V = {
+    sess: '', token: '', name: '', loginName: '', pin: '', admin: false,
+    cams: [], camsByUid: {}, index: {}, maps: {}, photos: [], loaded: {}, loading: new Map(),
+    view: [], shown: 200, vlist: [], vi: -1, seq: 0, gen: 0, blobs: new Map(), renderT: null, busy: false,
+  };
+  const VPAGE = 200;
+  let vSugEd = null, vAdmEd = null;
+
+  let vReloginP = null;
+  function vRelogin() {
+    if (!vReloginP) {
+      vReloginP = gs('viewerLogin', V.loginName, V.pin)
+        .then(r => { V.sess = r.sess; V.token = r.token; })
+        .finally(() => { vReloginP = null; });
+    }
+    return vReloginP;
+  }
+  async function vAuth(fn, ...args) {
+    try { return await gsRetry(fn, V.sess, ...args); }
+    catch (e) {
+      if (!/SESSION_EXPIRED/.test(errMsg(e))) throw e;
+      await vRelogin();
+      return await gsRetry(fn, V.sess, ...args);
+    }
+  }
+
+  function rowsEditor(box, onEnter) {
+    const ed = { rows: [] };
+    ed.add = v => {
+      const row = el('div', 'sprow');
+      const ac = makeAC(onEnter);
+      const x = el('button', 'xbtn'); x.type = 'button'; x.textContent = 'X'; x.title = 'Remove this species';
+      row.append(ac.wrap, x);
+      const rec = { row, input: ac.input };
+      ac.input.value = (typeof v === 'string') ? v : '';
+      x.addEventListener('click', () => {
+        if (ed.rows.length > 1) { ed.rows = ed.rows.filter(r => r !== rec); row.remove(); }
+        else rec.input.value = '';
+      });
+      ed.rows.push(rec);
+      box.appendChild(row);
+      return rec;
+    };
+    ed.set = list => { box.innerHTML = ''; ed.rows = []; (list && list.length ? list : ['']).forEach(v => ed.add(v)); };
+    ed.values = () => ed.rows.map(r => r.input.value.trim()).filter(Boolean);
+    ed.fill = vals => { const withVal = ed.rows.filter(r => r.input.value.trim()); withVal.forEach((r, i) => { r.input.value = vals[i]; }); };
+    ed.disable = on => ed.rows.forEach(r => { r.input.disabled = on; });
+    return ed;
+  }
+
+  function vwShow(which) {
+    $('#vwLogin').hidden = which !== 'login';
+    $('#vwMain').hidden = which !== 'main';
+    $('#vwSetup').hidden = which !== 'setup';
+    $('#vwReview').hidden = which !== 'review';
+    $('#vwTabs').hidden = !(V.admin && which !== 'login');
+    document.querySelectorAll('#vwTabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === (which === 'main' ? 'tagged' : which)));
+    $('#vwRefresh').hidden = which !== 'main';
+    if (which === 'login') $('#vwWho').textContent = '';
+  }
+  function vwOpen(instr) {
+    V.want = instr === true;
+    $('#vwDlg > header h2').textContent = V.want ? 'Instructor login' : 'View tagged photos';
+    if (!S.students.length) { toast('Still loading the student list. Try again in a moment.', 'warn'); return; }
+    const sel = $('#vwName');
+    sel.innerHTML = '<option value="">Select your name</option>';
+    S.students.forEach(n => { const o = el('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
+    const pre = $('#nameIn').value;
+    if (pre && S.students.includes(pre)) sel.value = pre;
+    $('#vwPin').value = $('#pinIn').value || '';
+    $('#vwErr').hidden = true;
+    vwShow('login');
+    $('#vwDlg').showModal();
+    (sel.value ? $('#vwPin') : sel).focus();
+  }
+  async function vwSignIn() {
+    const name = $('#vwName').value, pin = $('#vwPin').value.trim();
+    const err = $('#vwErr');
+    if (!name || !/^\d{4}$/.test(pin)) { err.hidden = false; err.textContent = 'Select your name and enter your 4-digit PIN.'; return; }
+    err.hidden = true;
+    $('#vwSignIn').disabled = true;
+    try {
+      const r = await gs('viewerLogin', name, pin);
+      V.sess = r.sess; V.token = r.token; V.name = r.name; V.loginName = name; V.pin = pin; V.admin = !!r.admin;
+      if (Array.isArray(r.species) && r.species.length) S.species = r.species;
+      $('#vwWho').textContent = 'Signed in as ' + r.name + (r.admin ? ' (instructor)' : '');
+      $('#vwPin').value = '';
+      if (V.want && !r.admin) { V.sess = ''; V.pin = ''; V.admin = false; err.hidden = false; err.textContent = 'That account is not set up as an instructor. Put yes in the Instructor column of the Student Names tab.'; return; }
+      if (V.want) { I.idxLoaded = false; instrGo('setup'); return; }
+      vwShow('main');
+      await vwLoadIndex(null);
+    } catch (e) {
+      if (!V.sess) { err.hidden = false; err.textContent = errMsg(e); }
+    } finally {
+      $('#vwSignIn').disabled = false;
+    }
+  }
+  function vwSignOut() {
+    V.gen++; V.sess = ''; V.pin = ''; V.token = ''; V.admin = false;
+    V.photos = []; V.view = []; V.vlist = []; V.cams = []; V.index = {}; V.maps = {}; V.loaded = {}; V.loading = new Map();
+    V.blobs.forEach(u => URL.revokeObjectURL(u)); V.blobs.clear();
+    $('#vwGrid').innerHTML = '';
+    instrReset();
+  }
+  function vwGridMsg(t, red) {
+    const g = $('#vwGrid');
+    g.innerHTML = '';
+    const d = el('div');
+    d.style.cssText = 'text-align:center; padding: 20px; grid-column: 1 / -1; color:' + (red ? 'var(--red)' : 'var(--muted)');
+    d.textContent = t;
+    g.appendChild(d);
+    $('#vwMore').hidden = true;
+  }
+
+  async function vwLoadIndex(keepCam) {
+    const gen = ++V.gen;
+    V.photos = []; V.view = []; V.loaded = {}; V.loading = new Map(); V.maps = {};
+    $('#vwCount').textContent = '';
+    vwGridMsg('Loading cameras…');
+    let r;
+    try { r = await vAuth('viewerIndex'); }
+    catch (e) { if (gen === V.gen) vwGridMsg('Could not load the camera list: ' + errMsg(e), true); return; }
+    if (gen !== V.gen) return;
+    V.cams = r.cameras || []; V.index = r.index || {};
+    V.camsByUid = {}; V.cams.forEach(c => { V.camsByUid[c.key] = c; });
+    if (Array.isArray(r.species) && r.species.length) S.species = r.species;
+    const sel = $('#vwCam');
+    sel.innerHTML = '';
+    const all = el('option'); all.value = ''; all.textContent = 'All cameras (' + V.cams.length + ')'; sel.appendChild(all);
+    const bySite = {};
+    V.cams.forEach(c => { (bySite[c.site] = bySite[c.site] || []).push(c); });
+    Object.keys(bySite).sort().forEach(site => {
+      const g = el('optgroup'); g.label = site;
+      bySite[site].forEach(c => {
+        const o = el('option'); o.value = c.key;
+        const n = (V.index[c.key] || []).length;
+        o.textContent = c.label + ' · ' + n + ' photo' + (n === 1 ? '' : 's') + (c.complete ? '' : ' (in progress)');
+        g.appendChild(o);
+      });
+      sel.appendChild(g);
+    });
+    sel.value = (keepCam && V.camsByUid[keepCam]) ? keepCam : '';
+    if (!V.cams.length) { vwGridMsg('No completed cameras yet.'); return; }
+    vwApplySelection();
+  }
+
+  function vwScopeUids() { const c = $('#vwCam').value; return c ? [c] : V.cams.map(x => x.key); }
+  function vwApplySelection() {
+    V.shown = VPAGE;
+    const uids = vwScopeUids();
+    if (uids.length === 1) vwLoadCamera(uids[0]);
+    vwEnsure(uids);
+    vwProg();
+    vwRender();
+  }
+  function vwEnsure(uids) {
+    const todo = uids.filter(u => !V.loaded[u] && !V.loading.has(u));
+    let next = 0;
+    const worker = async () => { while (next < todo.length) { await vwLoadCamera(todo[next++]); } };
+    return Promise.all([worker(), worker(), worker(), worker()]);
+  }
+  function vwProg() {
+    const uids = vwScopeUids();
+    const done = uids.filter(u => V.loaded[u]).length;
+    const box = $('#vwProg');
+    if (done >= uids.length) { box.hidden = true; return; }
+    box.hidden = false;
+    box.textContent = 'Loading photos… ' + done + ' of ' + uids.length + ' camera' + (uids.length === 1 ? '' : 's');
+  }
+  async function vwLoadCamera(uid) {
+    if (V.loaded[uid]) return;
+    if (V.loading.has(uid)) return V.loading.get(uid);
+    const gen = V.gen;
+    const p = (async () => {
+      try {
+        const list = await vAuth('viewerPhotos', uid);
+        if (gen !== V.gen) return;
+        vwMerge(uid, list || []);
+        V.loaded[uid] = true;
+      } catch (e) {
+        if (gen !== V.gen) return;
+        V.loaded[uid] = true;
+        const c = V.camsByUid[uid];
+        toast('Could not load ' + (c ? c.label : 'a camera') + ': ' + errMsg(e), 'error');
+      } finally {
+        if (gen === V.gen) { V.loading.delete(uid); vwProg(); vwRenderSoon(); }
+      }
+    })();
+    V.loading.set(uid, p);
+    return p;
+  }
+  function vwHay(p) {
+    return [speciesText(p), p.name, p.camLabel, p.sugg.map(x => x.name).join(' ')].join(' ').toLowerCase();
+  }
+  function vwMerge(uid, list) {
+    const cam = V.camsByUid[uid] || { label: '', site: '' };
+    let m = V.maps[uid];
+    if (!m) {
+      m = V.maps[uid] = { byId: {}, byName: {} };
+      (V.index[uid] || []).forEach(r => { if (r.id) m.byId[r.id] = r; if (r.name) m.byName[r.name] = r; });
+    }
+    list.forEach(d => {
+      const meta = m.byId[d.id] || m.byName[d.name] || null;
+      const p = {
+        id: d.id, name: d.name, uid: uid, camLabel: cam.label, site: cam.site,
+        species: meta ? meta.species : [], time: meta ? (meta.time || '') : '',
+        thumb: d.thumb, big: d.big, isVideo: !!d.isVideo,
+        stars: 0, nahhs: 0, sugg: [], myStar: false, myNahh: false, mySugg: [], votes: null,
+        inflight: 0, chain: null, conf: null, ui: null, hay: '',
+      };
+      vwSetFb(p, d.fb);
+      V.photos.push(p);
+    });
+  }
+  function vwSetFb(p, fb) {
+    fb = fb || {};
+    p.stars = fb.stars || 0; p.nahhs = fb.nahhs || 0; p.sugg = (fb.sugg || []).map(x => ({ name: x.name, n: x.n }));
+    p.myStar = !!fb.myStar; p.myNahh = !!fb.myNahh; p.mySugg = (fb.mySugg || []).slice();
+    p.votes = fb.votes || null;
+    p.conf = { stars: p.stars, nahhs: p.nahhs, sugg: p.sugg.map(x => ({ name: x.name, n: x.n })), myStar: p.myStar, myNahh: p.myNahh, mySugg: p.mySugg.slice(), votes: p.votes };
+    p.hay = vwHay(p);
+  }
+
+  function vwRenderSoon() { clearTimeout(V.renderT); V.renderT = setTimeout(vwRender, 150); }
+  function vwCompute() {
+    const cam = $('#vwCam').value;
+    const q = $('#vwSearch').value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const mine = $('#vwMine').checked, doubt = $('#vwDoubt').checked, sort = $('#vwSort').value;
+    const list = V.photos.filter(p => (!cam || p.uid === cam) && (!mine || p.myStar) && (!doubt || p.nahhs > 0) && q.every(t => p.hay.includes(t)));
+    const byTime = (a, b) => a.time < b.time ? -1 : a.time > b.time ? 1 : a.name.localeCompare(b.name);
+    const byCam = (a, b) => a.camLabel.localeCompare(b.camLabel, undefined, { numeric: true });
+    const cmp = {
+      cam: (a, b) => byCam(a, b) || byTime(a, b),
+      'new': (a, b) => byTime(b, a),
+      old: byTime,
+      sp: (a, b) => speciesText(a).localeCompare(speciesText(b)) || byCam(a, b) || byTime(a, b),
+      stars: (a, b) => (b.stars - a.stars) || byCam(a, b) || byTime(a, b),
+      nahh: (a, b) => (b.nahhs - a.nahhs) || byCam(a, b) || byTime(a, b),
+    }[sort] || byTime;
+    list.sort(cmp);
+    return list;
+  }
+  function vwSyncCard(p) {
+    if (!p.ui) return;
+    p.ui.star.textContent = (p.myStar ? '★ ' : '☆ ') + p.stars;
+    p.ui.star.classList.toggle('on', p.myStar);
+    p.ui.sp.textContent = speciesText(p) || 'Species unknown';
+    p.ui.sp.className = 'sp' + (speciesText(p) ? '' : ' unknown');
+    p.ui.name.textContent = p.name; p.ui.name.title = p.name;
+    p.ui.doubt.hidden = !p.nahhs;
+    p.ui.doubt.textContent = 'Nahhh ' + p.nahhs + (p.sugg.length ? ' · ' + p.sugg.map(x => x.name).join(', ') : '');
+  }
+  function vwRender() {
+    V.view = vwCompute();
+    const grid = $('#vwGrid');
+    grid.innerHTML = '';
+    const total = V.photos.filter(p => !$('#vwCam').value || p.uid === $('#vwCam').value).length;
+    $('#vwCount').textContent = V.view.length === total ? total + ' photo' + (total === 1 ? '' : 's') : 'Showing ' + V.view.length + ' of ' + total;
+    if (!V.view.length) {
+      const busy = vwScopeUids().some(u => !V.loaded[u]);
+      vwGridMsg(busy ? 'Loading photos…' : (total ? 'No photos match your search.' : 'No tagged photos for this selection yet.'));
+      return;
+    }
+    const n = Math.min(V.shown, V.view.length);
+    for (let i = 0; i < n; i++) grid.appendChild(vwCard(V.view[i], i));
+    $('#vwMore').hidden = n >= V.view.length;
+    $('#vwMore').textContent = 'Show more (' + (V.view.length - n) + ' left)';
+  }
+  function vwCard(p, i) {
+    const item = el('div', 'gallery-item');
+    item.tabIndex = 0; item.setAttribute('role', 'button');
+    const img = el('img');
+    img.loading = 'lazy'; img.decoding = 'async'; img.alt = p.name;
+    img.src = p.thumb || NO_THUMB;
+    if (p.isVideo) { item.style.border = '2px solid var(--blue)'; item.title = 'Video: ' + p.name; }
+    const star = el('button', 'gstar'); star.type = 'button'; star.title = 'Star this photo';
+    star.addEventListener('click', ev => { ev.stopPropagation(); vwToggleStar(p); });
+    star.addEventListener('keydown', ev => ev.stopPropagation());
+    const sp = el('div', 'sp'), cam = el('div', 'cam'), name = el('div', 'name'), doubt = el('div', 'doubt');
+    cam.textContent = p.camLabel; cam.title = p.camLabel;
+    item.append(img, star, sp, cam, name, doubt);
+    p.ui = { star, sp, name, doubt };
+    vwSyncCard(p);
+    const open = () => vvOpen(i);
+    item.addEventListener('click', open);
+    item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    return item;
+  }
+
+  /* feedback: optimistic, saved one request at a time per photo */
+  function vwApplyFb(p, fb) {
+    vwSetFb(p, fb);
+    vwSyncCard(p);
+    if ($('#vwViewer').open && V.vlist[V.vi] === p) vvSync(p);
+  }
+  function vwQueue(p) {
+    p.inflight++;
+    const payload = { star: p.myStar, nahh: p.myNahh, suggested: p.mySugg.slice() };
+    p.chain = (p.chain || Promise.resolve()).then(async () => {
+      try {
+        const r = await vAuth('setPhotoFeedback', p.uid, p.id, payload);
+        if (r.error) throw new Error(r.error);
+        p.inflight--;
+        if (Array.isArray(r.speciesList) && r.speciesList.length) S.species = r.speciesList;
+        if (p.inflight === 0) vwApplyFb(p, r.fb);
+        return true;
+      } catch (e) {
+        p.inflight--;
+        toast('Could not save: ' + errMsg(e), 'error');
+        if (p.inflight === 0 && p.conf) vwApplyFb(p, p.conf);
+        return false;
+      }
+    });
+    return p.chain;
+  }
+  function vwToggleStar(p) {
+    p.myStar = !p.myStar;
+    p.stars = Math.max(0, p.stars + (p.myStar ? 1 : -1));
+    vwSyncCard(p);
+    if ($('#vwViewer').open && V.vlist[V.vi] === p) vvSync(p);
+    vwQueue(p);
+  }
+  function vwToggleNahh(p) {
+    p.myNahh = !p.myNahh;
+    p.nahhs = Math.max(0, p.nahhs + (p.myNahh ? 1 : -1));
+    if (!p.myNahh) p.mySugg = [];
+    vwSyncCard(p);
+    vwQueue(p);
+  }
+
+  /* the photo viewer */
+  function vvOpen(i) {
+    V.vlist = V.view.slice();
+    V.vi = i;
+    if (!$('#vwViewer').open) $('#vwViewer').showModal();
+    vvShow();
+  }
+  function vvClose() { const d = $('#vwViewer'); if (d.open) d.close(); }
+  function vvStep(d) {
+    if (V.busy) return;
+    const n = V.vi + d;
+    if (n < 0 || n >= V.vlist.length) return;
+    V.vi = n;
+    vvShow();
+  }
+  function vvControls() {
+    $('#vvPrev').disabled = V.busy || V.vi <= 0;
+    $('#vvNext').disabled = V.busy || V.vi >= V.vlist.length - 1;
+  }
+  function vvSync(p) {
+    $('#vvTitle').textContent = speciesText(p) || 'Species unknown';
+    $('#tvPos2').textContent = (V.vi + 1) + ' of ' + V.vlist.length;
+    $('#vvName').textContent = p.camLabel + '  ·  ' + p.name;
+    const sb = $('#vvStar');
+    sb.classList.toggle('on', p.myStar);
+    sb.textContent = (p.myStar ? '★ Starred' : '☆ Star') + ' · ' + p.stars;
+    const nb = $('#vvNahh');
+    nb.classList.toggle('on', p.myNahh);
+    nb.textContent = 'Nahhh · ' + p.nahhs;
+    $('#vvSuggSummary').textContent = p.sugg.length
+      ? 'Suggested IDs: ' + p.sugg.map(x => x.name + (x.n > 1 ? ' (' + x.n + ')' : '')).join(', ')
+      : (p.nahhs ? 'Nobody has suggested a different ID yet.' : '');
+    $('#vvSuggBox').hidden = !p.myNahh;
+    $('#vvAdmin').hidden = !V.admin;
+    if (V.admin) {
+      const chips = $('#vvChips');
+      chips.innerHTML = '';
+      p.sugg.forEach(x => {
+        const b = el('button', 'rchip'); b.type = 'button';
+        b.textContent = 'Use ' + x.name + (x.n > 1 ? ' (' + x.n + ')' : '');
+        b.addEventListener('click', () => { vAdmEd.set([x.name]); });
+        chips.appendChild(b);
+      });
+      const votes = $('#vvVotes');
+      votes.innerHTML = '';
+      (p.votes || []).forEach(v => {
+        const d = el('div');
+        d.textContent = v.student + ': ' + [v.star ? 'starred' : '', v.nahh ? 'Nahhh' : '', v.sugg.length ? 'suggests ' + v.sugg.join(', ') : ''].filter(Boolean).join(' · ');
+        votes.appendChild(d);
+      });
+    }
+    vvControls();
+  }
+  async function vvShow() {
+    const p = V.vlist[V.vi];
+    if (!p) { vvClose(); return; }
+    const seq = ++V.seq;
+    vwSetStatus('');
+    vSugEd.set(p.mySugg.length ? p.mySugg : ['']);
+    vAdmEd.set(p.species);
+    vvSync(p);
+    const img = $('#vvImg'), vid = $('#vvVid'), msg = $('#vvMsg');
+    const say = t => { msg.textContent = t || ''; msg.style.display = t ? 'flex' : 'none'; };
+    vid.pause(); vid.removeAttribute('src'); vid.load(); vid.style.display = 'none';
+    img.style.display = 'none';
+    [V.vlist[V.vi + 1], V.vlist[V.vi - 1]].forEach(n => { if (n && n.big && !n.isVideo) { const w = new Image(); w.src = n.big; } });
+    if (p.isVideo) {
+      say('');
+      if (p.big) vid.poster = p.big; else vid.removeAttribute('poster');
+      vid.src = driveMediaUrl(p.id) + '&access_token=' + encodeURIComponent(V.token);
+      vid.style.display = 'block';
+      vid.load();
+      return;
+    }
+    say('Loading…');
+    let url = null;
+    if (p.big) { try { url = await loadThumb(p.big); } catch (e) { url = null; } }
+    if (seq !== V.seq) return;
+    if (!url) { try { url = await vvBlob(p); } catch (e) { url = null; } }
+    if (seq !== V.seq) return;
+    if (!url) { say('Could not load this photo.'); return; }
+    img.src = url; img.style.display = 'block'; say('');
+  }
+  async function vvBlob(p) {
+    if (V.blobs.has(p.id)) return V.blobs.get(p.id);
+    const get = () => fetch(driveMediaUrl(p.id), { headers: { Authorization: 'Bearer ' + V.token } });
+    let res = await get();
+    if (res.status === 401 || res.status === 403) { await vRelogin(); res = await get(); }
+    if (!res.ok) throw new Error('Failed to download image');
+    const url = URL.createObjectURL(await res.blob());
+    V.blobs.set(p.id, url);
+    return url;
+  }
+  function vwSetStatus(t, adm) { $(adm ? '#vvAdmStatus' : '#vvStatus').textContent = t || ''; if (!t && !adm) $('#vvAdmStatus').textContent = ''; }
+
+  async function vvNahhClick() {
+    const p = V.vlist[V.vi];
+    if (!p) return;
+    vwToggleNahh(p);
+    if (p.myNahh) {
+      vSugEd.set(p.mySugg.length ? p.mySugg : ['']);
+      vvSync(p);
+      if (vSugEd.rows[0]) vSugEd.rows[0].input.focus();
+    } else {
+      vSugEd.set(['']);
+      vvSync(p);
+    }
+  }
+  async function vvSaveSuggestion() {
+    const p = V.vlist[V.vi];
+    if (!p || V.busy) return;
+    const vals = vSugEd.values();
+    if (!vals.length) { toast('Type the species you think it is, or click Nahhh again to take your Nahhh back.', 'warn'); if (vSugEd.rows[0]) vSugEd.rows[0].input.focus(); return; }
+    V.busy = true; vvControls(); vSugEd.disable(true);
+    let resolved = null;
+    try { resolved = await resolveSpecies(vals); } catch (e) { resolved = null; }
+    if (!resolved) { V.busy = false; vSugEd.disable(false); vvControls(); return; }
+    vSugEd.fill(resolved);
+    p.mySugg = resolved.slice();
+    if (!p.myNahh) { p.myNahh = true; p.nahhs++; }
+    vwSetStatus('Saving…');
+    const ok = await vwQueue(p);
+    V.busy = false; vSugEd.disable(false); vvControls();
+    if (ok) { vwSetStatus('Saved. Thanks!'); toast('Suggestion saved.', 'ok'); } else vwSetStatus('');
+  }
+  async function vvAdminSave() {
+    const p = V.vlist[V.vi];
+    if (!p || V.busy || !V.admin) return;
+    const vals = vAdmEd.values();
+    if (!vals.length) { toast('Enter the official species.', 'warn'); if (vAdmEd.rows[0]) vAdmEd.rows[0].input.focus(); return; }
+    if (vals.join('|').toLowerCase() === p.species.join('|').toLowerCase()) { toast('That is already the official ID.', 'warn'); return; }
+    V.busy = true; vvControls(); vAdmEd.disable(true);
+    let resolved = null;
+    try { resolved = await resolveSpecies(vals); } catch (e) { resolved = null; }
+    if (!resolved) { V.busy = false; vAdmEd.disable(false); vvControls(); return; }
+    vAdmEd.fill(resolved);
+    if (!confirm('Change the official ID of this photo to ' + resolved.join(', ') + '?\n\nThis renames the file in Drive and updates the Master Data log. Nahhh marks and suggestions on this photo are cleared (stars stay).')) {
+      V.busy = false; vAdmEd.disable(false); vvControls(); return;
+    }
+    vwSetStatus('Saving…', true);
+    try {
+      const r = await vAuth('adminChangeTag', p.uid, p.id, resolved);
+      if (r.error) throw new Error(r.error);
+      if (Array.isArray(r.speciesList) && r.speciesList.length) S.species = r.speciesList;
+      if (r.warning) toast(r.warning, 'warn');
+      p.name = r.name; p.species = r.species;
+      const m = V.maps[p.uid];
+      if (m) { const meta = m.byId[p.id] || null; if (meta) { meta.species = r.species; meta.name = r.name; } }
+      vwApplyFb(p, r.fb);
+      vAdmEd.set(p.species);
+      vwSyncCard(p);
+      toast('ID changed to ' + r.species.join(', ') + '.', 'ok');
+      vwSetStatus('Changed.', true);
+    } catch (e) {
+      toast('Could not change the ID: ' + errMsg(e), 'error');
+      vwSetStatus('', true);
+    } finally {
+      V.busy = false; vAdmEd.disable(false); vvControls();
+    }
+  }
+
+  /* ---------- instructor tools: camera setup, folder picker, review any camera ---------- */
+  const I = { data: null, edits: {}, adds: [], fedits: {}, checks: {}, sem: null, site: '', q: '', busy: false, tmp: 1, loading: false };
+  const R = { sem: '', site: '' };
+  const ID_FIELDS = ['semester', 'site', 'camId', 'deployment', 'collection'];
+  const FIELD_NAMES = { semester: 'Semester', site: 'Site', camId: 'Camera', deployment: 'Deployment date', collection: 'Collection date', lat: 'Latitude', lon: 'Longitude', brand: 'Brand', reviewer: 'Reviewer', complete: 'Complete' };
+  const DATE_RE = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+
+  function instrReset() {
+    I.data = null; I.edits = {}; I.adds = []; I.fedits = {}; I.checks = {}; I.sem = null; I.site = ''; I.q = ''; I.busy = false;
+    const t = $('#suTable'); if (t) t.innerHTML = '';
+    $('#suMsg').textContent = ''; $('#suMsg').className = '';
+    $('#suSearch').value = '';
+    $('#rvDetails').hidden = true; $('#rvMsg').hidden = true;
+    $('#rvCam').innerHTML = ''; $('#rvOpen').disabled = true;
+    ['fbDlg', 'sfDlg', 'cfDlg'].forEach(id => { const d = $('#' + id); if (d.open) d.close(); });
+  }
+  function instrGo(tab) {
+    if (!V.admin || !V.sess) return;
+    if (tab === 'tagged') { vwShow('main'); if (V.want && !I.idxLoaded) { I.idxLoaded = true; vwLoadIndex(null); } return; }
+    vwShow(tab);
+    if (!I.data && !I.loading) instrLoad();
+    else if (tab === 'setup') suRender(); else rvRender();
+  }
+  async function instrLoad() {
+    if (I.loading) return;
+    I.loading = true;
+    const gen = V.gen;
+    $('#suMsg').className = ''; $('#suMsg').textContent = 'Loading cameras…';
+    try {
+      const d = await vAuth('adminGetSetup');
+      if (gen !== V.gen) return;
+      I.data = d; I.edits = {}; I.adds = []; I.fedits = {}; I.checks = {};
+      if (I.sem === null) { const a = d.cameras.find(c => c.active); I.sem = a ? a.semester : ''; }
+      if (R.sem === '' && !R.init) { R.sem = I.sem; R.init = true; }
+      $('#suMsg').textContent = '';
+      suRender(); rvRender();
+    } catch (e) {
+      if (gen === V.gen) { $('#suMsg').className = 'err'; $('#suMsg').textContent = 'Could not load: ' + errMsg(e); }
+    } finally { I.loading = false; }
+  }
+  function sameSite(a, b) { return String(a).trim().toLowerCase() === String(b).trim().toLowerCase(); }
+  function siteObj(name) { return (I.data.sites || []).find(s => sameSite(s.site, name)) || {}; }
+
+  /* ---- folder browser ---- */
+  const F = { resolve: null, cur: null, last: '', gen: 0 };
+  function fbPick(title) {
+    return new Promise(resolve => {
+      F.resolve = resolve;
+      $('#fbTitle').textContent = title;
+      $('#fbSearch').value = '';
+      $('#fbDlg').showModal();
+      fbOpen(F.last || '');
+    });
+  }
+  function fbFinish(v) {
+    const r = F.resolve; F.resolve = null;
+    if ($('#fbDlg').open) $('#fbDlg').close();
+    if (r) r(v);
+  }
+  async function fbOpen(id) {
+    const gen = ++F.gen;
+    const list = $('#fbList');
+    $('#fbErr').hidden = true;
+    list.innerHTML = '<div style="color:var(--muted)">Loading…</div>';
+    $('#fbUse').disabled = true; $('#fbInfo').textContent = '';
+    let r;
+    try { r = await vAuth('adminBrowse', id); } catch (e) { r = { error: errMsg(e) }; }
+    if (gen !== F.gen) return;
+    if (r.error) {
+      list.innerHTML = '';
+      $('#fbErr').hidden = false; $('#fbErr').textContent = r.error;
+      if (id) { F.last = ''; const b = el('button'); b.type = 'button'; b.textContent = 'Back to locations'; b.addEventListener('click', () => fbOpen('')); list.appendChild(b); }
+      return;
+    }
+    F.cur = r;
+    const crumbs = $('#fbCrumbs');
+    crumbs.innerHTML = '';
+    const addCrumb = (name, cid) => {
+      if (crumbs.childNodes.length) crumbs.appendChild(document.createTextNode(' / '));
+      const b = el('button'); b.type = 'button'; b.textContent = name; b.addEventListener('click', () => fbOpen(cid)); crumbs.appendChild(b);
+    };
+    addCrumb('Locations', '');
+    (r.crumbs || []).forEach(c => addCrumb(c.name, c.id));
+    if (id) { const s = el('span'); s.textContent = ' / ' + r.name; crumbs.appendChild(s); }
+    list.innerHTML = '';
+    (r.folders || []).forEach(f => {
+      const b = el('button'); b.type = 'button'; b.textContent = f.name;
+      b.addEventListener('click', () => fbOpen(f.id));
+      list.appendChild(b);
+    });
+    if (!r.folders || !r.folders.length) {
+      const d = el('div'); d.style.color = 'var(--muted)'; d.textContent = id ? 'No folders inside.' : 'Nothing to show.'; list.appendChild(d);
+    }
+    const real = id && id !== '@shared';
+    if (real) F.last = r.id === 'root' ? '' : r.id;
+    $('#fbUse').disabled = !real;
+    $('#fbInfo').textContent = real ? r.name + ' — ' + (r.media ? r.media + (r.mediaMore ? '+' : '') + ' photos/videos directly inside' : 'no photos directly inside') : '';
+  }
+  async function fbSearch() {
+    const t = $('#fbSearch').value.trim();
+    if (t.length < 2) return;
+    const gen = ++F.gen;
+    $('#fbErr').hidden = true; $('#fbUse').disabled = true; $('#fbInfo').textContent = '';
+    const list = $('#fbList');
+    list.innerHTML = '<div style="color:var(--muted)">Searching…</div>';
+    $('#fbCrumbs').innerHTML = '';
+    let r;
+    try { r = await vAuth('adminSearchFolders', t); } catch (e) { if (gen === F.gen) { list.innerHTML = ''; $('#fbErr').hidden = false; $('#fbErr').textContent = errMsg(e); } return; }
+    if (gen !== F.gen) return;
+    list.innerHTML = '';
+    if (!r.length) { list.innerHTML = '<div style="color:var(--muted)">No folders found.</div>'; return; }
+    r.forEach(f => {
+      const b = el('button'); b.type = 'button';
+      b.appendChild(document.createTextNode(f.name));
+      if (f.parent) { const s = el('small'); s.textContent = '  in ' + f.parent; b.appendChild(s); }
+      b.addEventListener('click', () => fbOpen(f.id));
+      list.appendChild(b);
+    });
+  }
+
+  /* ---- staged folder choices ---- */
+  function fKey(scope, key, kind) { return scope + '|' + key + '|' + kind; }
+  function stageFolder(scope, key, kind, f) {          // f = {id,name} or null to clear
+    I.fedits[fKey(scope, key, kind)] = { scope: scope, key: key, kind: kind, id: f ? f.id : '', name: f ? f.name : '' };
+  }
+  function effFolder(scope, key, kind, saved) {         // -> {id,name,pending} | null
+    const e = I.fedits[fKey(scope, key, kind)];
+    if (e) return e.id ? { id: e.id, name: e.name, pending: true } : null;
+    return saved ? { id: saved.id, name: saved.name } : null;
+  }
+  function folderCell(c, kind) {
+    const td = el('td', 'f');
+    const own = effFolder('camera', c.uid, kind, kind === 'photos' ? c.photos : c.taggedFolder);
+    const st = siteObj(c.site);
+    const site = effFolder('site', st.site || c.site, kind, kind === 'photos' ? st.photos : st.tagged);
+    const t = el('div');
+    const src = el('span', 'fsrc');
+    if (own) { t.textContent = own.name; if (own.pending) t.className = 'fpend'; src.textContent = 'chosen for this camera'; }
+    else if (site) { t.textContent = site.name; src.textContent = 'from site folder' + (site.pending ? ' (unsaved)' : ''); }
+    else { t.textContent = 'Automatic'; t.style.color = 'var(--muted)'; src.textContent = kind === 'photos' ? 'searched as before' : 'created as before'; }
+    td.append(t, src);
+    const b = el('button', 'btn mini'); b.type = 'button'; b.textContent = 'Choose…';
+    b.addEventListener('click', async () => {
+      const f = await fbPick((kind === 'photos' ? 'Photos folder for ' : 'Tagged folder for ') + c.camId + ' (' + c.site + ')');
+      if (f) { stageFolder('camera', c.uid, kind, f); suRender(true); }
+    });
+    td.appendChild(b);
+    if (own) {
+      const x = el('button', 'btn mini'); x.type = 'button'; x.textContent = 'Clear'; x.style.marginLeft = '4px';
+      x.addEventListener('click', () => { stageFolder('camera', c.uid, kind, null); suRender(true); });
+      td.appendChild(x);
+    }
+    return td;
+  }
+
+  /* ---- camera setup table ---- */
+  function effVal(c, f) { const e = I.edits[c.uid]; return e && f in e ? e[f] : (f === 'complete' ? (c.complete ? 'Yes' : 'No') : c[f]); }
+  function setEdit(c, f, v) {
+    const orig = f === 'complete' ? (c.complete ? 'Yes' : 'No') : c[f];
+    const e = I.edits[c.uid] = I.edits[c.uid] || {};
+    if (String(v).trim() === String(orig).trim()) delete e[f]; else e[f] = v;
+    if (!Object.keys(e).length) delete I.edits[c.uid];
+    suPending();
+  }
+  function inp(val, cls, ph) {
+    const i = el('input', 'in ' + (cls || '')); i.type = 'text'; i.value = val == null ? '' : val; if (ph) i.placeholder = ph;
+    i.autocomplete = 'off'; i.spellcheck = false;
+    return i;
+  }
+  function editCell(c, f, cls, ph) {
+    const td = el('td', cls || '');
+    const locked = ID_FIELDS.indexOf(f) >= 0 && c.locked;
+    if (locked) {
+      const s = el('span', 'locked'); s.textContent = c[f]; s.title = 'Locked: this camera ' + c.lockReason; td.appendChild(s); return td;
+    }
+    const i = inp(effVal(c, f), (f in (I.edits[c.uid] || {})) ? 'chg' : '', ph);
+    i.addEventListener('input', () => { setEdit(c, f, i.value); i.classList.toggle('chg', f in (I.edits[c.uid] || {})); });
+    td.appendChild(i);
+    return td;
+  }
+  function suFiltered() {
+    const q = I.q.trim().toLowerCase();
+    return I.data.cameras.filter(c => {
+      if (I.sem && c.semester !== I.sem) return false;
+      if (I.site && !sameSite(c.site, I.site)) return false;
+      if (q && !(c.camId + ' ' + c.site + ' ' + c.reviewer + ' ' + c.semester).toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }
+  function fillSelect(sel, vals, allLabel, cur) {
+    sel.innerHTML = '';
+    if (allLabel != null) { const o = el('option'); o.value = ''; o.textContent = allLabel; sel.appendChild(o); }
+    vals.forEach(v => { const o = el('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
+    sel.value = vals.includes(cur) ? cur : '';
+  }
+  function uniqueSites(list) { const seen = [], out = []; list.forEach(c => { const k = c.site.toLowerCase(); if (!seen.includes(k)) { seen.push(k); out.push(c.site); } }); return out.sort((a, b) => a.localeCompare(b)); }
+  function suRender(keepScroll) {
+    if (!I.data) return;
+    const sc = $('#suScroll'), top = sc.scrollTop;
+    fillSelect($('#suSem'), I.data.semesters, 'All semesters', I.sem);
+    I.sem = $('#suSem').value;
+    const inSem = I.data.cameras.filter(c => !I.sem || c.semester === I.sem);
+    fillSelect($('#suSite'), uniqueSites(inSem), 'All sites', I.site);
+    I.site = $('#suSite').value;
+    const list = suFiltered();
+    const t = $('#suTable');
+    t.innerHTML = '';
+    const head = el('tr');
+    ['Semester', 'Site', 'Camera', 'Deployed', 'Collected', 'Latitude', 'Longitude', 'Brand', 'Reviewer', 'Status', 'Photos folder', 'Tagged folder', ''].forEach(h => { const th = el('th'); th.textContent = h; head.appendChild(th); });
+    t.appendChild(head);
+    I.adds.forEach(a => t.appendChild(suAddRow(a)));
+    list.forEach(c => {
+      const tr = el('tr'); tr.dataset.uid = c.uid;
+      tr.appendChild(editCell(c, 'semester', 't'));
+      tr.appendChild(editCell(c, 'site', 't'));
+      tr.appendChild(editCell(c, 'camId', 'n', 'Cam 1'));
+      tr.appendChild(editCell(c, 'deployment', 'd', 'M/D/YYYY'));
+      tr.appendChild(editCell(c, 'collection', 'd', 'M/D/YYYY'));
+      tr.appendChild(editCell(c, 'lat', 'n'));
+      tr.appendChild(editCell(c, 'lon', 'n'));
+      tr.appendChild(editCell(c, 'brand', 't'));
+      const rv = el('td', 't');
+      const released = (I.edits[c.uid] || {}).reviewer === '';
+      const rs = el('span'); rs.textContent = c.reviewer ? (released ? c.reviewer + ' → released' : c.reviewer) : '—'; if (released) rs.className = 'fpend'; else if (!c.reviewer) rs.style.color = 'var(--muted)';
+      rv.appendChild(rs);
+      if (c.reviewer) {
+        const b = el('button', 'btn mini'); b.type = 'button'; b.style.marginLeft = '6px'; b.textContent = released ? 'Undo' : 'Release';
+        b.title = 'Clears the reviewer so the camera can be claimed again. Tagged photos are kept.';
+        b.addEventListener('click', () => { if (released) { delete (I.edits[c.uid] || {}).reviewer; if (I.edits[c.uid] && !Object.keys(I.edits[c.uid]).length) delete I.edits[c.uid]; } else setEdit(c, 'reviewer', ''); suRender(true); });
+        rv.appendChild(b);
+      }
+      tr.appendChild(rv);
+      const st = el('td', 'n');
+      const cur = effVal(c, 'complete') === 'Yes';
+      const ss = el('span'); ss.textContent = cur ? 'Complete' : 'Open'; if ('complete' in (I.edits[c.uid] || {})) ss.className = 'fpend';
+      st.appendChild(ss);
+      const sb = el('button', 'btn mini'); sb.type = 'button'; sb.style.marginLeft = '6px'; sb.textContent = cur ? 'Reopen' : 'Mark complete';
+      sb.addEventListener('click', () => { setEdit(c, 'complete', cur ? 'No' : 'Yes'); suRender(true); });
+      st.appendChild(sb);
+      if (c.tagged) { const n = el('span', 'fsrc'); n.textContent = c.tagged + ' tagged'; st.appendChild(n); }
+      tr.appendChild(st);
+      tr.appendChild(folderCell(c, 'photos'));
+      tr.appendChild(folderCell(c, 'tagged'));
+      const ck = el('td');
+      const cb = el('button', 'btn mini'); cb.type = 'button'; cb.textContent = 'Check';
+      cb.title = 'Looks up the folders this camera would use. Reads only.';
+      cb.addEventListener('click', () => suCheck(c, cb));
+      ck.appendChild(cb);
+      tr.appendChild(ck);
+      t.appendChild(tr);
+      if (I.checks[c.uid]) {
+        const r2 = el('tr', 'chkrow'); const td = el('td'); td.colSpan = 13; td.textContent = I.checks[c.uid]; r2.appendChild(td); t.appendChild(r2);
+      }
+    });
+    $('#suCount').textContent = list.length + ' camera' + (list.length === 1 ? '' : 's') + (I.adds.length ? ' + ' + I.adds.length + ' new' : '');
+    if (!list.length && !I.adds.length) { const r2 = el('tr'); const td = el('td'); td.colSpan = 13; td.style.color = 'var(--muted)'; td.textContent = 'No cameras match.'; r2.appendChild(td); t.appendChild(r2); }
+    suPending();
+    sc.scrollTop = keepScroll ? top : 0;
+  }
+  function suAddRow(a) {
+    const tr = el('tr', 'newrow');
+    const mk = (f, cls, ph, listId) => {
+      const td = el('td', cls); const i = inp(a.fields[f], '', ph); if (listId) i.setAttribute('list', listId);
+      i.addEventListener('input', () => { a.fields[f] = i.value; suPending(); });
+      td.appendChild(i); return td;
+    };
+    tr.append(mk('semester', 't', 'e.g. Fall 2026', 'suSemList'), mk('site', 't', 'Site', 'suSiteList'), mk('camId', 'n', 'Cam 1'), mk('deployment', 'd', 'M/D/YYYY'), mk('collection', 'd', 'M/D/YYYY'), mk('lat', 'n'), mk('lon', 'n'), mk('brand', 't'));
+    const n1 = el('td'); n1.colSpan = 2; n1.style.color = 'var(--lichen)'; n1.textContent = 'New camera (added below the last row)';
+    tr.appendChild(n1);
+    ['photos', 'tagged'].forEach(kind => {
+      const td = el('td', 'f');
+      const cur = a[kind];
+      const t = el('div'); t.textContent = cur ? cur.name : 'Automatic'; if (cur) t.className = 'fpend'; else t.style.color = 'var(--muted)';
+      td.appendChild(t);
+      const b = el('button', 'btn mini'); b.type = 'button'; b.textContent = 'Choose…';
+      b.addEventListener('click', async () => { const f = await fbPick((kind === 'photos' ? 'Photos folder' : 'Tagged folder') + ' for the new camera'); if (f) { a[kind] = f; suRender(true); } });
+      td.appendChild(b);
+      if (cur) { const x = el('button', 'btn mini'); x.type = 'button'; x.style.marginLeft = '4px'; x.textContent = 'Clear'; x.addEventListener('click', () => { a[kind] = null; suRender(true); }); td.appendChild(x); }
+      tr.appendChild(td);
+    });
+    const rm = el('td'); const rb = el('button', 'btn mini'); rb.type = 'button'; rb.textContent = 'Remove';
+    rb.addEventListener('click', () => { I.adds = I.adds.filter(x => x !== a); suRender(true); });
+    rm.appendChild(rb); tr.appendChild(rm);
+    return tr;
+  }
+  async function suCheck(c, btn) {
+    btn.disabled = true; btn.textContent = 'Checking…';
+    let txt;
+    try {
+      const r = await vAuth('adminCheckCamera', c.uid);
+      if (r.error) txt = 'Check: ' + r.error;
+      else txt = 'Check: photos in "' + (r.media ? r.media.name : '?') + '" (' + (r.source === 'auto' ? 'found automatically' : r.source + ' choice') + ')' +
+        (r.count != null ? ' — ' + r.count + (r.capped ? '+' : '') + ' still to review' : '') +
+        '; tagged: ' + (r.tagged ? '"' + r.tagged.name + '"' : 'not created yet');
+    } catch (e) { txt = 'Check failed: ' + errMsg(e); }
+    I.checks[c.uid] = txt;
+    suRender(true);
+  }
+  function suChangeSummary() {
+    const items = [];
+    const byUid = {}; I.data.cameras.forEach(c => { byUid[c.uid] = c; });
+    Object.keys(I.edits).forEach(uid => {
+      const c = byUid[uid]; if (!c) return;
+      Object.keys(I.edits[uid]).forEach(f => {
+        const o = f === 'complete' ? (c.complete ? 'Yes' : 'No') : c[f];
+        items.push(c.camId + ' (' + c.site + '): ' + FIELD_NAMES[f] + ' ' + (o === '' ? '(blank)' : '"' + o + '"') + ' → ' + (I.edits[uid][f] === '' ? '(released)' : '"' + I.edits[uid][f] + '"'));
+      });
+    });
+    I.adds.forEach(a => items.push('New camera: ' + [a.fields.camId, a.fields.site, a.fields.semester, a.fields.deployment + ' to ' + a.fields.collection].join(', ') + (a.photos ? ' · photos folder "' + a.photos.name + '"' : '') + (a.tagged ? ' · tagged folder "' + a.tagged.name + '"' : '')));
+    Object.keys(I.fedits).forEach(k => {
+      const e = I.fedits[k]; const who = e.scope === 'site' ? 'Site ' + e.key : (byUid[e.key] ? byUid[e.key].camId + ' (' + byUid[e.key].site + ')' : e.key);
+      items.push(who + ': ' + (e.kind === 'photos' ? 'photos' : 'tagged') + ' folder → ' + (e.id ? '"' + e.name + '"' : 'automatic'));
+    });
+    return items;
+  }
+  function suPending() {
+    const n = suChangeSummary().length;
+    $('#suPending').textContent = n ? n + ' unsaved change' + (n === 1 ? '' : 's') + '.' : 'No changes.';
+    $('#suSave').disabled = !n || I.busy; $('#suDiscard').disabled = !n || I.busy;
+  }
+  function suError(t) { $('#suMsg').className = 'err'; $('#suMsg').textContent = t; }
+  function suValidate() {
+    const byUid = {}; I.data.cameras.forEach(c => { byUid[c.uid] = c; });
+    for (const uid of Object.keys(I.edits)) {
+      const c = byUid[uid]; const e = I.edits[uid];
+      const idChanged = Object.keys(e).some(f => ID_FIELDS.indexOf(f) >= 0);
+      if (idChanged && (c.photos || c.taggedFolder)) return c.camId + ' (' + c.site + ') has its own folder choices. Clear them (and save) before changing its camera, site or dates.';
+      if (idChanged && Object.keys(I.fedits).some(k => I.fedits[k].scope === 'camera' && I.fedits[k].key === uid)) return 'Save the camera details for ' + c.camId + ' first, then choose its folders.';
+      for (const f of ['deployment', 'collection']) if (f in e && !DATE_RE.test(String(e[f]).trim())) return c.camId + ': ' + FIELD_NAMES[f] + ' must look like 10/2/2026.';
+    }
+    for (let i = 0; i < I.adds.length; i++) {
+      const f = I.adds[i].fields;
+      for (const k of ['semester', 'site', 'camId', 'deployment', 'collection', 'lat', 'lon']) if (!String(f[k] || '').trim()) return 'New camera ' + (i + 1) + ': ' + FIELD_NAMES[k] + ' is required.';
+      for (const k of ['deployment', 'collection']) if (!DATE_RE.test(String(f[k]).trim())) return 'New camera ' + (i + 1) + ': ' + FIELD_NAMES[k] + ' must look like 10/2/2026.';
+    }
+    return '';
+  }
+  async function suSave() {
+    if (I.busy || !I.data) return;
+    $('#suMsg').className = ''; $('#suMsg').textContent = '';
+    const bad = suValidate();
+    if (bad) { suError(bad); return; }
+    const list = $('#cfList'); list.innerHTML = '';
+    suChangeSummary().forEach(t => { const li = el('li'); li.textContent = t; list.appendChild(li); });
+    $('#cfDlg').showModal();
+  }
+  async function suDoSave() {
+    $('#cfDlg').close();
+    I.busy = true; suPending();
+    $('#suMsg').className = ''; $('#suMsg').textContent = 'Saving…';
+    const byUid = {}; I.data.cameras.forEach(c => { byUid[c.uid] = c; });
+    const edits = Object.keys(I.edits).map(uid => {
+      const c = byUid[uid], fields = {};
+      Object.keys(I.edits[uid]).forEach(f => { fields[f] = { old: f === 'complete' ? (c.complete ? 'Yes' : 'No') : c[f], new: I.edits[uid][f] }; });
+      return { uid: uid, row: c.row, fields: fields };
+    });
+    const adds = I.adds.map((a, i) => ({ index: i, fields: Object.assign({}, a.fields) }));
+    let done = false;
+    try {
+      let added = [];
+      if (edits.length || adds.length) {
+        const r = await vAuth('adminSaveSetup', { edits: edits, adds: adds });
+        if (!r || r.error) { suError('Nothing was saved.\n' + ((r && r.error) || 'Unknown error.')); return; }
+        added = r.added || [];
+      }
+      done = true;
+      const changes = Object.keys(I.fedits).map(k => ({ scope: I.fedits[k].scope, key: I.fedits[k].key, kind: I.fedits[k].kind, id: I.fedits[k].id }));
+      added.forEach(x => {
+        const a = I.adds[x.index];
+        if (a && a.photos) changes.push({ scope: 'camera', key: x.uid, kind: 'photos', id: a.photos.id });
+        if (a && a.tagged) changes.push({ scope: 'camera', key: x.uid, kind: 'tagged', id: a.tagged.id });
+      });
+      if (changes.length) {
+        const r2 = await vAuth('adminSaveFolders', changes);
+        if (!r2 || r2.error) {
+          I.edits = {}; I.adds = []; I.fedits = {};
+          await instrReloadQuiet();
+          suError('Camera details were saved, but the folder choices were not:\n' + ((r2 && r2.error) || 'Unknown error.'));
+          return;
+        }
+      }
+      I.edits = {}; I.adds = []; I.fedits = {};
+      await instrReloadQuiet();
+      $('#suMsg').className = ''; $('#suMsg').textContent = 'Saved.';
+      setTimeout(() => { if ($('#suMsg').textContent === 'Saved.') $('#suMsg').textContent = ''; }, 3000);
+    } catch (e) {
+      suError((done ? 'Camera details were saved, but something went wrong afterwards:\n' : 'Nothing was saved.\n') + errMsg(e));
+      if (done) { I.edits = {}; I.adds = []; I.fedits = {}; await instrReloadQuiet(); }
+    } finally { I.busy = false; suPending(); }
+  }
+  async function instrReloadQuiet() {
+    try { const d = await vAuth('adminGetSetup'); I.data = d; I.checks = {}; suRender(true); rvRender(); } catch (e) { /* the table keeps showing the last copy */ }
+  }
+  function suAddCamera() {
+    const sem = I.sem || (I.data.cameras.find(c => c.active) || {}).semester || '';
+    I.adds.unshift({ fields: { semester: sem, site: I.site || '', camId: '', deployment: '', collection: '', lat: '', lon: '', brand: '' }, photos: null, tagged: null });
+    suRender();
+    const first = $('#suTable tr.newrow input'); if (first) first.focus();
+  }
+  function suDatalists() {
+    let d = $('#suSemList');
+    if (!d) { d = el('datalist'); d.id = 'suSemList'; document.body.appendChild(d); const s = el('datalist'); s.id = 'suSiteList'; document.body.appendChild(s); }
+    $('#suSemList').innerHTML = ''; $('#suSiteList').innerHTML = '';
+    (I.data ? I.data.semesters : []).forEach(v => { const o = el('option'); o.value = v; $('#suSemList').appendChild(o); });
+    (I.data ? uniqueSites(I.data.cameras) : []).forEach(v => { const o = el('option'); o.value = v; $('#suSiteList').appendChild(o); });
+  }
+
+  /* ---- site folders dialog ---- */
+  function sfRender() {
+    const body = $('#sfBody'); body.innerHTML = '';
+    uniqueSites(I.data.cameras).forEach(name => {
+      const st = siteObj(name);
+      const row = el('div', 'sfrow'); const h = el('h3'); h.textContent = name; row.appendChild(h);
+      [['photos', 'Photos folder', st.photos], ['tagged', 'Tagged folder', st.tagged]].forEach(([kind, label, saved]) => {
+        const line = el('div', 'line'); const k = el('span', 'k'); k.textContent = label; line.appendChild(k);
+        const cur = effFolder('site', st.site || name, kind, saved);
+        const v = el('span'); v.textContent = cur ? cur.name : 'Automatic'; if (cur && cur.pending) v.className = 'fpend'; if (!cur) v.style.color = 'var(--muted)';
+        line.appendChild(v);
+        const b = el('button', 'btn mini'); b.type = 'button'; b.textContent = 'Choose…';
+        b.addEventListener('click', async () => { const f = await fbPick(label + ' for site ' + name); if (f) { stageFolder('site', st.site || name, kind, f); sfRender(); suRender(true); } });
+        line.appendChild(b);
+        if (cur) { const x = el('button', 'btn mini'); x.type = 'button'; x.textContent = 'Clear'; x.addEventListener('click', () => { stageFolder('site', st.site || name, kind, null); sfRender(); suRender(true); }); line.appendChild(x); }
+        row.appendChild(line);
+      });
+      body.appendChild(row);
+    });
+  }
+
+  /* ---- review any camera ---- */
+  function rvCamLabel(c) {
+    let s = c.camId + ' (' + c.site + ') ' + c.deployment + ' to ' + (c.collection || '?');
+    if (c.complete) s += ' [Complete]'; else if (c.reviewer) s += ' [Claimed by ' + c.reviewer + ']';
+    return s;
+  }
+  function rvRender() {
+    if (!I.data) return;
+    fillSelect($('#rvSem'), I.data.semesters, 'All semesters', R.sem); R.sem = $('#rvSem').value;
+    const inSem = I.data.cameras.filter(c => !R.sem || c.semester === R.sem);
+    fillSelect($('#rvSite'), uniqueSites(inSem), 'All sites', R.site); R.site = $('#rvSite').value;
+    const prev = $('#rvCam').value;
+    const sel = $('#rvCam'); sel.innerHTML = '<option value="">Select a camera</option>';
+    inSem.filter(c => !R.site || sameSite(c.site, R.site)).forEach(c => { const o = el('option'); o.value = c.uid; o.textContent = rvCamLabel(c); sel.appendChild(o); });
+    sel.value = [...sel.options].some(o => o.value === prev) ? prev : '';
+    rvDetails();
+  }
+  function rvDetails() {
+    const c = I.data && I.data.cameras.find(x => x.uid === $('#rvCam').value);
+    const box = $('#rvDetails'); $('#rvOpen').disabled = !c;
+    if (!c) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = '<dl><dt>Site</dt><dd>' + esc(c.site) + '</dd><dt>Camera</dt><dd>' + esc(c.camId) + (c.brand ? ' (' + esc(c.brand) + ')' : '') + '</dd>' +
+      '<dt>Dates</dt><dd>' + esc(c.deployment) + ' to ' + esc(c.collection || '?') + '</dd>' +
+      (c.lat || c.lon ? '<dt>Location</dt><dd>' + esc(c.lat) + ', ' + esc(c.lon) + '</dd>' : '') +
+      '<dt>Status</dt><dd>' + (c.complete ? 'Complete' : 'Open') + (c.reviewer ? ', reviewer: ' + esc(c.reviewer) : ', no reviewer') + (c.tagged ? ', ' + c.tagged + ' tagged photo' + (c.tagged === 1 ? '' : 's') : '') + '</dd></dl>' +
+      '<div style="margin-top:14px"><button id="rvPrev" class="btn" type="button">Preview photo</button></div>' +
+      '<div id="rvPrevBox" style="margin-top:12px;display:none;border-radius:6px;overflow:hidden;border:1px solid var(--line)"><img id="rvPrevImg" alt="Preview" style="width:100%;height:auto;display:block"></div>';
+    $('#rvPrev').addEventListener('click', async () => {
+      const b = $('#rvPrev'); b.disabled = true; b.textContent = 'Loading preview…';
+      try { const url = await gsRetry('getPreviewImage', c.uid); $('#rvPrevImg').src = url; $('#rvPrevBox').style.display = 'block'; }
+      catch (e) { toast('Could not load preview: ' + errMsg(e), 'error'); }
+      b.textContent = 'Preview photo'; b.disabled = false;
+    });
+  }
+  async function rvOpen() {
+    const uid = $('#rvCam').value; if (!uid || !V.sess) return;
+    const name = V.loginName, pin = V.pin;
+    const btn = $('#rvOpen'); btn.disabled = true; btn.textContent = 'Opening…';
+    $('#rvMsg').hidden = true;
+    try {
+      if (S.tagQueue.length || S.isTagging) await drainTags();
+      const r = await vAuth('instructorOpenCamera', uid);
+      S.instr = true;
+      S.reviewer = r.config.reviewer || name; S.pin = pin; S.sess = r.sess; S.token = r.token;
+      S.cfg = r.config; S.files = r.files; S.undo = []; S.tagged = 0;
+      clearImageCache();
+      S.idx = Math.min(r.startIndex || 0, Math.max(0, S.files.length - 1));
+      $('#camTitle').innerHTML = esc(S.cfg.label) + ' · instructor<small>' + esc(S.cfg.site) + '</small>';
+      $('#completeBtn').style.display = 'none';
+      resetZoom();
+      $('#vwDlg').close();
+      show('review');
+      if (r.skipped) toast(r.skipped + ' file' + (r.skipped === 1 ? '' : 's') + ' in this folder are not photos or videos and were skipped.', 'warn');
+      await showCurrent();
+    } catch (e) {
+      $('#rvMsg').hidden = false; $('#rvMsg').textContent = errMsg(e);
+    } finally { btn.textContent = 'Open for review'; btn.disabled = !$('#rvCam').value; }
+  }
+
+  function wireInstructor() {
+    document.querySelectorAll('#vwTabs button').forEach(b => b.addEventListener('click', () => instrGo(b.dataset.tab)));
+    $('#suSem').addEventListener('change', () => { I.sem = $('#suSem').value; I.site = ''; suRender(); });
+    $('#suSite').addEventListener('change', () => { I.site = $('#suSite').value; suRender(); });
+    $('#suSearch').addEventListener('input', () => { I.q = $('#suSearch').value; suRender(); });
+    $('#suAdd').addEventListener('click', () => { suDatalists(); suAddCamera(); });
+    $('#suSiteBtn').addEventListener('click', () => { sfRender(); $('#sfDlg').showModal(); });
+    $('#sfDone').addEventListener('click', () => $('#sfDlg').close());
+    $('#suReload').addEventListener('click', () => {
+      if (suChangeSummary().length && !confirm('Discard your unsaved changes and reload from the sheet?')) return;
+      I.data = null; instrLoad();
+    });
+    $('#suSave').addEventListener('click', suSave);
+    $('#suDiscard').addEventListener('click', () => { I.edits = {}; I.adds = []; I.fedits = {}; $('#suMsg').textContent = ''; $('#suMsg').className = ''; suRender(true); });
+    $('#cfNo').addEventListener('click', () => $('#cfDlg').close());
+    $('#cfYes').addEventListener('click', suDoSave);
+    $('#fbCancel').addEventListener('click', () => fbFinish(null));
+    $('#fbDlg').addEventListener('cancel', e => { e.preventDefault(); fbFinish(null); });
+    $('#fbUse').addEventListener('click', () => { if (F.cur && F.cur.id && F.cur.id !== '@shared') fbFinish({ id: F.cur.id, name: F.cur.name }); });
+    $('#fbGo').addEventListener('click', fbSearch);
+    $('#fbSearch').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); fbSearch(); } });
+    $('#rvSem').addEventListener('change', () => { R.sem = $('#rvSem').value; R.site = ''; rvRender(); });
+    $('#rvSite').addEventListener('change', () => { R.site = $('#rvSite').value; rvRender(); });
+    $('#rvCam').addEventListener('change', rvDetails);
+    $('#rvOpen').addEventListener('click', rvOpen);
+    $('#rvReload').addEventListener('click', () => { I.data = null; instrLoad(); });
+    // Student screens: an instructor review never leaks into a student review.
+    const leave = () => { S.instr = false; $('#completeBtn').style.display = ''; };
+    $('#beginBtn').addEventListener('click', leave);
+    $('#nameIn').addEventListener('keydown', e => { if (e.key === 'Enter') leave(); });
+    $('#pinIn').addEventListener('keydown', e => { if (e.key === 'Enter') leave(); });
+  }
+
+  function wireViewer() {
+    wireInstructor();
+    vSugEd = rowsEditor($('#vvRows'), vvSaveSuggestion);
+    vAdmEd = rowsEditor($('#vvAdmRows'), vvAdminSave);
+    vSugEd.set(['']); vAdmEd.set(['']);
+    $('#vwOpenBtn').addEventListener('click', () => vwOpen(false));
+    $('#instrOpenBtn').addEventListener('click', () => vwOpen(true));
+    $('#vwSignIn').addEventListener('click', vwSignIn);
+    $('#vwPin').addEventListener('input', () => { $('#vwPin').value = $('#vwPin').value.replace(/\D/g, ''); });
+    $('#vwPin').addEventListener('keydown', e => { if (e.key === 'Enter') vwSignIn(); });
+    $('#vwName').addEventListener('keydown', e => { if (e.key === 'Enter' && $('#vwPin').value.length === 4) vwSignIn(); });
+    $('#vwClose').addEventListener('click', () => $('#vwDlg').close());
+    $('#vwDlg').addEventListener('close', () => { vvClose(); vwSignOut(); });
+    $('#vwRefresh').addEventListener('click', () => vwLoadIndex($('#vwCam').value));
+    $('#vwCam').addEventListener('change', vwApplySelection);
+    $('#vwSort').addEventListener('change', () => { V.shown = VPAGE; vwRender(); });
+    $('#vwMine').addEventListener('change', () => { V.shown = VPAGE; vwRender(); });
+    $('#vwDoubt').addEventListener('change', () => { V.shown = VPAGE; vwRender(); });
+    $('#vwSearch').addEventListener('input', () => { V.shown = VPAGE; vwRenderSoon(); });
+    $('#vwMore').addEventListener('click', () => { V.shown += VPAGE; vwRender(); });
+    const vv = $('#vwViewer');
+    $('#vvClose').addEventListener('click', vvClose);
+    $('#vvPrev').addEventListener('click', () => vvStep(-1));
+    $('#vvNext').addEventListener('click', () => vvStep(1));
+    $('#vvStar').addEventListener('click', () => { const p = V.vlist[V.vi]; if (p) vwToggleStar(p); });
+    $('#vvNahh').addEventListener('click', vvNahhClick);
+    $('#vvAdd').addEventListener('click', () => { const r = vSugEd.add(''); r.input.focus(); });
+    $('#vvAdmAdd').addEventListener('click', () => { const r = vAdmEd.add(''); r.input.focus(); });
+    $('#vvSuggSave').addEventListener('click', vvSaveSuggestion);
+    $('#vvAdmSave').addEventListener('click', vvAdminSave);
+    vv.addEventListener('cancel', e => { if (V.busy) e.preventDefault(); });
+    vv.addEventListener('close', () => {
+      V.seq++;
+      const vid = $('#vvVid'); vid.pause(); vid.removeAttribute('src'); vid.load();
+      if ($('#vwDlg').open && V.sess) vwRender();     // pick up stars / sort changes made while viewing
+    });
+    vv.addEventListener('keydown', e => {
+      const tg = e.target.tagName;
+      if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || tg === 'VIDEO') return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); vvStep(1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); vvStep(-1); }
+    });
+  }
+
+  /* ---------- events ---------- */
+  function wireEvents() {
+    wireViewer();
+    $('#nameIn').addEventListener('change', () => { renderCameras(); updateBegin(); });
+    $('#pinIn').addEventListener('input', () => { $('#pinIn').value = $('#pinIn').value.replace(/\D/g, ''); updateBegin(); });
+    $('#siteSel').addEventListener('change', renderCameras);
+    $('#camSel').addEventListener('change', () => {
+      $('#previewContainer') && ($('#previewContainer').style.display = 'none');
+      renderDetails();
+    });
+ 
+    $('#myGalleryBtn').addEventListener('click', async () => {
+      if (S.busy) return;
+      pause();
+      const modal = $('#userGalleryModal');
+      const grid = $('#userGalleryGrid');
+      modal.showModal();
+      $('#gSearch').value = '';
+      $('#gCount').textContent = '';
+      grid.innerHTML = '<div style="color:var(--muted); text-align:center; padding: 20px; grid-column: 1 / -1;">Loading tagged photos…</div>';
+      try {
+        await drainTags();
+        G.all = await gsAuth('getCameraTaggedPhotos');
+        applyGalleryFilter();
+      } catch (e) {
+        toast('Error: ' + errMsg(e), 'error');
+        grid.innerHTML = '<div style="color:var(--red); text-align:center; padding: 20px; grid-column: 1 / -1;">Could not load tagged photos. Close this window and try again.</div>';
+      }
+    });
+    $('#closeUserGalleryBtn').addEventListener('click', () => $('#userGalleryModal').close());
+    $('#userGalleryModal').addEventListener('close', () => { closeViewer(); clearTagBlobs(); G.all = []; G.view = []; });
+    $('#gSearch').addEventListener('input', applyGalleryFilter);
+    const tv = $('#tagViewer');
+    $('#tvClose').addEventListener('click', closeViewer);
+    $('#tvPrev').addEventListener('click', () => stepViewer(-1));
+    $('#tvNext').addEventListener('click', () => stepViewer(1));
+    $('#tvAdd').addEventListener('click', () => { const r = viewerAddRow(''); r.input.focus(); });
+    $('#tvSave').addEventListener('click', saveTagChange);
+    $('#tvRemove').addEventListener('click', removeTag);
+    tv.addEventListener('cancel', e => { if (G.busy) e.preventDefault(); });
+    tv.addEventListener('close', () => {
+      G.seq++;
+      const vid = $('#tvVid'); vid.pause(); vid.removeAttribute('src'); vid.load();
+      if ($('#userGalleryModal').open) applyGalleryFilter();   // pick up any changes made while viewing
+    });
+    tv.addEventListener('keydown', e => {
+      const t = e.target, tg = t.tagName;
+      if (tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || tg === 'VIDEO') return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); stepViewer(1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); stepViewer(-1); }
+    });
+ 
+    $('#beginBtn').addEventListener('click', beginReview);
+    $('#nameIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !$('#beginBtn').disabled) beginReview(); });
+    $('#pinIn').addEventListener('keydown', e => { if (e.key === 'Enter' && !$('#beginBtn').disabled) beginReview(); });
+ 
+    const vid = $('#vid');
+    vid.addEventListener('timeupdate', () => {
+      if (!S.isVideoSeeking && vid.duration) {
+        $('#vScrub').value = (vid.currentTime / vid.duration) * 1000;
+        updateVideoTimeDisplay();
+      }
+    });
+    vid.addEventListener('loadedmetadata', () => { $('#vScrub').value = 0; updateVideoTimeDisplay(); });
+    vid.addEventListener('canplay', () => stageMessage(''));
+    vid.addEventListener('playing', () => stageMessage(''));
+    vid.addEventListener('waiting', () => { if (vid.getAttribute('src')) stageMessage('Buffering…', true); });
+    vid.addEventListener('error', onVideoError);
+    vid.addEventListener('play', () => { $('#vPlayBtn').textContent = 'Pause'; });
+    vid.addEventListener('pause', () => { $('#vPlayBtn').textContent = 'Play'; });
+    vid.addEventListener('ended', advanceFromVideo);
+    $('#vPlayBtn').addEventListener('click', () => { vid.paused ? vid.play().catch(() => {}) : vid.pause(); });
+    $('#vBack5').addEventListener('click', () => stepVideo(-5));
+    $('#vBack1').addEventListener('click', () => stepVideo(-1));
+    $('#vFwd1').addEventListener('click', () => stepVideo(1));
+    $('#vFwd5').addEventListener('click', () => stepVideo(5));
+    $('#vMute').addEventListener('click', () => {
+      const b = $('#vMute');
+      const soundOn = b.dataset.on === '1';
+      b.dataset.on = soundOn ? '0' : '1';
+      vid.muted = soundOn;
+      b.textContent = soundOn ? 'Sound off' : 'Sound on';
+    });
+    $('#vidDriveBtn').addEventListener('click', () => {
+      const f = S.files[S.idx];
+      if (!f) return;
+      $('#vidFail').style.display = 'none';
+      const fr = $('#vidFrame');
+      fr.src = 'https://drive.google.com/file/d/' + encodeURIComponent(f.id) + '/preview';
+      fr.style.display = 'block';
+    });
+    $('#vidSkipBtn').addEventListener('click', manualNext);
+    const vScrub = $('#vScrub');
+    vScrub.addEventListener('mousedown', () => { S.isVideoSeeking = true; });
+    vScrub.addEventListener('touchstart', () => { S.isVideoSeeking = true; });
+    vScrub.addEventListener('input', e => {
+      if (vid.duration) { vid.currentTime = (e.target.value / 1000) * vid.duration; updateVideoTimeDisplay(); }
+    });
+    vScrub.addEventListener('change', () => { S.isVideoSeeking = false; });
+    vScrub.addEventListener('mouseup', () => { S.isVideoSeeking = false; });
+    vScrub.addEventListener('touchend', () => { S.isVideoSeeking = false; });
+ 
+    $('#completeBtn').addEventListener('click', async () => {
+      if (S.busy) return;
+      pause();
+      const left = S.files.length;
+      const msg = (left ? 'You still have ' + left + ' untagged file' + (left === 1 ? '' : 's') + ' for this camera.\n\n' : '') +
+        "Mark this review as complete? You won't be able to log any more photos for this camera.";
+      if (!confirm(msg)) return;
+      S.busy = true;
+      setBusy(true, 'Saving your last tags…');
+      try {
+        await drainTags();
+        if (S.files.length > left) {
+          toast('Some tags could not be saved. Please tag those files again before finishing.', 'warn');
+          S.busy = false; setBusy(false);
+          showCurrent();
+          return;
+        }
+        setBusy(true, 'Marking complete…');
+        await gsAuth('markReviewComplete');
+        toast('Review complete! Reloading…', 'ok');
+        setTimeout(() => window.location.reload(), 1500);
+      } catch (e) {
+        toast('Error: ' + errMsg(e), 'error');
+        S.busy = false;
+        setBusy(false);
+      }
+    });
+ 
+    const help = $('#help');
+    const openHelp = () => help.showModal();
+    $('#helpBtn1').addEventListener('click', openHelp);
+    $('#helpBtn2').addEventListener('click', openHelp);
+    $('#helpClose').addEventListener('click', () => help.close());
+    $('#changeBtn').addEventListener('click', () => {
+      if (S.busy) return;
+      pause(); saveProgressSoon(true); showVideoUI(false); show('select'); refreshCameras(true);
+    });
+    $('#playBtn').addEventListener('click', togglePlay);
+    $('#prevBtn').addEventListener('click', manualPrev);
+    $('#nextBtn').addEventListener('click', manualNext);
+    $('#zoomBtn').addEventListener('click', resetZoom);
+    $('#undoBtn').addEventListener('click', undoLast);
+    $('#addBtn').addEventListener('click', addRow);
+    $('#clearBtn').addEventListener('click', clearRows);
+    $('#tagBtn').addEventListener('click', tagCurrent);
+    $('#speed').addEventListener('input', e => {
+      S.speedMs = +e.target.value;
+      $('#speedLbl').textContent = 'Delay: ' + S.speedMs + ' ms';
+      savePrefs();
+    });
+    $('#scrub').addEventListener('input', e => {
+      if (S.busy) return;
+      pause();
+      S.idx = +e.target.value;
+      updateCounters();
+      clearTimeout(S.scrubTimer);
+      S.scrubTimer = setTimeout(() => { saveProgressSoon(); showCurrent(); }, 150);
+    });
+    TEXT_IDS.forEach(id => $('#' + id).addEventListener('change', () => { refreshOverlay(); savePrefs(); }));
+    document.addEventListener('click', e => {
+      const b = e.target.closest && e.target.closest('button');
+      if (b && e.detail > 0) b.blur();
+      const pop = $('#textPop');
+      if (pop.open && !pop.contains(e.target)) pop.open = false;
+    });
+    wireStage();
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) { if (S.screen === 'review') saveProgressSoon(true); }
+      else if (S.screen === 'select') refreshCameras(true);
+    });
+    window.addEventListener('beforeunload', e => {
+      if (S.tagQueue.length || S.isTagging) { e.preventDefault(); e.returnValue = ''; }
+    });
+  }
+  function onKey(e) {
+    if (S.screen !== 'review' || $('#help').open || $('#userGalleryModal').open || $('#spDlg').open || $('#tagViewer').open) return;
+    const t = e.target, tag = t.tagName;
+    const typing = (tag === 'INPUT' && t.type !== 'range' && t.type !== 'checkbox') || tag === 'TEXTAREA' || tag === 'SELECT';
+    const isRange = tag === 'INPUT' && t.type === 'range';
+    const isBtn = tag === 'BUTTON' || tag === 'SUMMARY' || (tag === 'INPUT' && t.type === 'checkbox');
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); undoLast(); return; }
+    if (e.key === 'Escape') { $('#textPop').open = false; clearRows(); return; }
+    if (typing) return;
+    if (e.key === 'ArrowRight' && !isRange) { e.preventDefault(); manualNext(); }
+    else if (e.key === 'ArrowLeft' && !isRange) { e.preventDefault(); manualPrev(); }
+    else if (e.key === ' ' && !isBtn) { e.preventDefault(); togglePlay(); }
+    else if (/^[1-6]$/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey && !isBtn) { e.preventDefault(); tagRecent(+e.key - 1); }
+  }
+})();
+</script>
+</body>
+</html>
